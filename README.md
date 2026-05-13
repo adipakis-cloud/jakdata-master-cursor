@@ -1,29 +1,38 @@
 # JAKDATA — Sistem Data Wilayah Jakarta
 
-**Stack:** React + Tailwind · Fastify TypeScript · PostgreSQL · Prisma · Docker
+**Stack:** React + Vite + Tailwind · Fastify TypeScript · Prisma · Supabase PostgreSQL
 
 ---
 
-## 🚀 Cara Menjalankan
+## 🚀 Cara Menjalankan Tanpa Docker
 
 ### Prasyarat
-- Docker Desktop terinstall dan berjalan
-- Port 3000, 3001, 5432 tidak dipakai aplikasi lain
+- Node.js dan npm
+- Supabase PostgreSQL project atau PostgreSQL lain yang bisa diakses dari lokal
+- Port 3000 dan 3001 tidak dipakai aplikasi lain
 
-### 1. Clone & setup environment
+Docker compose masih ada untuk eksperimen legacy, tetapi bukan workflow harian.
 
-```bash
-cp .env.example .env
-# Edit .env jika perlu (opsional untuk development)
-```
-
-### 2. Jalankan semua service
+### 1. Clone & setup environment backend
 
 ```bash
-docker compose up --build
+cd backend
+cp ../.env.example .env
+# isi DATABASE_URL dengan Supabase PostgreSQL, gunakan sslmode=require
+npm install
+npm run db:generate
+npm run db:push
+npm run db:seed
+npm run dev
 ```
 
-Pertama kali build membutuhkan ±3-5 menit.
+### 2. Jalankan frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
 ### 3. Akses aplikasi
 
@@ -63,20 +72,34 @@ Pertama kali build membutuhkan ±3-5 menit.
 
 ---
 
-## 🔧 Development (tanpa Docker)
+## 🔧 Database Foundation
 
-```bash
-# Backend
-cd backend
-cp .env.example .env  # isi DATABASE_URL
+Database source of truth ada di:
+
+- `backend/prisma/schema.prisma`
+- Dokumentasi: `docs/database-foundation.md`
+- Seed sample operasional: `backend/prisma/seed.ts`
+- Seed wilayah Jakarta production-like: `backend/prisma/seed.jakarta.ts`
+
+Root-level Prisma schema lama sudah dihapus agar tidak ada definisi database ganda.
+
+### Windows PowerShell tanpa Docker
+
+```powershell
+Set-Location backend
+Copy-Item ..\.env.example .env
+# Edit .env dan isi DATABASE_URL Supabase PostgreSQL
 npm install
-npx prisma generate
-npx prisma db push
-npx ts-node prisma/seed.ts
+npm run db:generate
+npm run db:push
+npm run db:seed
 npm run dev
+```
 
-# Frontend (terminal baru)
-cd frontend
+Terminal PowerShell kedua:
+
+```powershell
+Set-Location frontend
 npm install
 npm run dev
 ```
@@ -100,12 +123,15 @@ POSTGRES_PASSWORD=password_kuat
 
 ```
 jakdata/
-├── docker-compose.yml
+├── docker-compose.yml           # legacy/ops only, bukan workflow harian
 ├── .env.example
-├── prisma/
-│   ├── schema.prisma          # Database schema (25+ model)
-│   └── seed.ts                # Data awal
+├── docs/
+│   └── database-foundation.md # Database model, seed, Supabase, PowerShell
 ├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma      # Single source of truth database
+│   │   ├── seed.ts            # Data sample operasional
+│   │   └── seed.jakarta.ts    # Wilayah Jakarta + admin
 │   └── src/
 │       ├── main.ts            # Fastify server
 │       ├── config/prisma.ts

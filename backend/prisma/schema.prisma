@@ -7,6 +7,9 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// JAKDATA operational intelligence v1 database foundation.
+// backend/prisma/schema.prisma is the single source of truth.
+
 enum UserRole {
   admin_pusat
   koordinator_kecamatan
@@ -18,6 +21,36 @@ enum UserRole {
   kasir_warmindo
   auditor
   finance_admin
+  data_analyst
+}
+
+enum WilayahLevel {
+  provinsi
+  kota
+  kecamatan
+  kelurahan
+  rw
+  rt
+}
+
+enum KotaTipe {
+  kota
+  kabupaten
+}
+
+enum AssignmentStatus {
+  aktif
+  digantikan
+  dicabut
+  selesai
+}
+
+enum VerificationStatus {
+  draft
+  pending
+  verified
+  rejected
+  expired
 }
 
 enum StatusEkonomi {
@@ -26,6 +59,65 @@ enum StatusEkonomi {
   rentan
   sedang
   mampu
+}
+
+enum JenisKelamin {
+  L
+  P
+}
+
+enum StatusPerkawinan {
+  belum_kawin
+  kawin
+  cerai_hidup
+  cerai_mati
+}
+
+enum HubunganKeluarga {
+  kepala_keluarga
+  pasangan
+  anak
+  orang_tua
+  saudara
+  kerabat
+  lainnya
+}
+
+enum StatusWarga {
+  aktif
+  pindah
+  meninggal
+  tidak_diketahui
+}
+
+enum TipeBantuan {
+  sembako
+  uang_tunai
+  voucher
+  kesehatan
+  pendidikan
+  modal_usaha
+  pelatihan
+  hunian
+  darurat
+  lainnya
+}
+
+enum DistribusiStatus {
+  terjadwal
+  diterima
+  tidak_hadir
+  ditolak
+  batal
+}
+
+enum ReportChannel {
+  whatsapp
+  web
+  email
+  koordinator
+  petugas
+  sistem
 }
 
 enum UrgencyLevel {
@@ -44,12 +136,124 @@ enum ReportStatus {
   ditolak
 }
 
+enum FieldReportType {
+  kunjungan_warga
+  verifikasi_bantuan
+  kondisi_wilayah
+  monitoring_umkm
+  monitoring_warung
+  monitoring_warmindo
+  supply_chain
+  kejadian_lapangan
+}
+
 enum WarmindoStatus {
   rencana
   persiapan
   aktif
   evaluasi
   tutup
+}
+
+enum BusinessStatus {
+  aktif
+  tidak_aktif
+  tutup_sementara
+  tutup_permanen
+  prospek
+}
+
+enum BusinessScale {
+  mikro
+  kecil
+  menengah
+}
+
+enum BusinessTransactionType {
+  penjualan
+  pembelian
+  pengeluaran
+  bantuan_modal
+  penyesuaian_stok
+  transfer_stok
+}
+
+enum PaymentMethod {
+  tunai
+  transfer
+  qris
+  ewallet
+  tempo
+  lainnya
+}
+
+enum SupplyChainRole {
+  supplier
+  distributor
+  produsen
+  pengecer
+  pembeli
+}
+
+enum AlertType {
+  sosial
+  ekonomi
+  kesehatan
+  bencana
+  keamanan
+  bantuan
+  usaha
+  supply_chain
+  data_quality
+  sistem
+}
+
+enum AlertStatus {
+  open
+  acknowledged
+  in_progress
+  resolved
+  dismissed
+}
+
+enum SentimentSource {
+  whatsapp
+  media_sosial
+  survei
+  laporan_warga
+  kunjungan_lapangan
+  berita
+  lainnya
+}
+
+enum SentimentPolarity {
+  positive
+  neutral
+  negative
+  mixed
+}
+
+enum RiskCategory {
+  sosial
+  ekonomi
+  kesehatan
+  bencana
+  keamanan
+  usaha
+  data_quality
+  operasional
+}
+
+enum AnomalyType {
+  bantuan_ganda
+  stok_menipis
+  lonjakan_laporan
+  transaksi_tidak_wajar
+  data_warga_duplikat
+  risiko_area_naik
+  sentimen_negatif
+  assignment_kosong
+  lainnya
 }
 
 enum AiTaskStatus {
@@ -59,14 +263,23 @@ enum AiTaskStatus {
   failed
 }
 
-enum DistribusiStatus {
-  terjadwal
-  diterima
-  tidak_hadir
-  ditolak
+enum AiRecommendationStatus {
+  proposed
+  accepted
+  rejected
+  applied
+  expired
 }
 
-// ── USERS & SECURITY ─────────────────────────────────────────────
+enum FileVisibility {
+  private
+  internal
+  public
+}
+
+// -----------------------------------------------------------------
+// USERS, GOVERNANCE, AND AUDIT
+// -----------------------------------------------------------------
 
 model User {
   id            Int       @id @default(autoincrement())
@@ -80,30 +293,71 @@ model User {
   lastLoginAt   DateTime? @map("last_login_at")
   loginAttempts Int       @default(0) @map("login_attempts")
   lockedUntil   DateTime? @map("locked_until")
-  kecamatanId   Int?      @map("kecamatan_id")
-  kelurahanId   Int?      @map("kelurahan_id")
-  rwId          Int?      @map("rw_id")
-  rtId          Int?      @map("rt_id")
-  warmindoId    Int?      @map("warmindo_id")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
 
-  kecamatan     Kecamatan?     @relation(fields: [kecamatanId], references: [id])
-  kelurahan     Kelurahan?     @relation(fields: [kelurahanId], references: [id])
-  rw            RW?            @relation(fields: [rwId], references: [id])
-  rt            RT?            @relation(fields: [rtId], references: [id])
+  kecamatanId Int? @map("kecamatan_id")
+  kelurahanId Int? @map("kelurahan_id")
+  rwId        Int? @map("rw_id")
+  rtId        Int? @map("rt_id")
+  warmindoId  Int? @map("warmindo_id")
+
+  createdBy Int?      @map("created_by")
+  updatedBy Int?      @map("updated_by")
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  kecamatan Kecamatan?      @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan Kelurahan?      @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw        RW?             @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt        RT?             @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  warmindo  WarmindoOutlet? @relation("UserWarmindoScope", fields: [warmindoId], references: [id], onDelete: SetNull)
+
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
-  laporanWarga  LaporanWarga[]
-  aiTasks       AiTask[]
-  designJobs    DesignJob[]
+
+  wilayahAssignments WilayahAssignment[] @relation("AssignmentUser")
+  assignedByRows     WilayahAssignment[] @relation("AssignmentAssignedBy")
+  revokedByRows      WilayahAssignment[] @relation("AssignmentRevokedBy")
+
+  createdWarga  Warga[]    @relation("WargaCreatedBy")
+  updatedWarga  Warga[]    @relation("WargaUpdatedBy")
+  verifiedWarga Warga[]    @relation("WargaVerifiedBy")
+  createdKK     Keluarga[] @relation("KeluargaCreatedBy")
+  updatedKK     Keluarga[] @relation("KeluargaUpdatedBy")
+  verifiedKK    Keluarga[] @relation("KeluargaVerifiedBy")
+
+  createdReports       LaporanWarga[]   @relation("LaporanCreatedBy")
+  assignedReports      LaporanWarga[]   @relation("LaporanAssignedTo")
+  createdMessages      LaporanMessage[] @relation("LaporanMessageCreatedBy")
+  createdFieldReports  FieldReport[]    @relation("FieldReportCreatedBy")
+  assignedFieldReports FieldReport[]    @relation("FieldReportAssignedTo")
+
+  managedWarmindo      WarmindoOutlet[]           @relation("WarmindoManager")
+  warmindoTransactions WarmindoTransaksi[]        @relation("WarmindoKasir")
+  localTransactions    LocalBusinessTransaction[] @relation("BusinessTransactionRecordedBy")
+
+  createdAlerts      OperationalAlert[] @relation("AlertCreatedBy")
+  acknowledgedAlerts OperationalAlert[] @relation("AlertAcknowledgedBy")
+  resolvedAlerts     OperationalAlert[] @relation("AlertResolvedBy")
+  escalatedAlerts    OperationalAlert[] @relation("AlertEscalatedTo")
+
+  createdAnomalies        Anomaly[]             @relation("AnomalyCreatedBy")
+  assignedAnomalies       Anomaly[]             @relation("AnomalyAssignedTo")
+  createdAiTasks          AiTask[]              @relation("AiTaskCreatedBy")
+  createdDesignJobs       DesignJob[]           @relation("DesignJobCreatedBy")
+  createdRecommendations  AiRecommendationLog[] @relation("AiRecommendationCreatedBy")
+  reviewedRecommendations AiRecommendationLog[] @relation("AiRecommendationReviewedBy")
+  uploadedFiles           File[]                @relation("FileUploadedBy")
 
   @@index([email])
   @@index([role])
+  @@index([aktif])
   @@index([kecamatanId])
   @@index([kelurahanId])
   @@index([rwId])
   @@index([rtId])
+  @@index([warmindoId])
+  @@index([deletedAt])
   @@map("users")
 }
 
@@ -120,7 +374,7 @@ model RefreshToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([tokenHash])
+  @@index([expiresAt])
   @@map("refresh_tokens")
 }
 
@@ -128,42 +382,116 @@ model AuditLog {
   id         BigInt   @id @default(autoincrement())
   userId     Int?     @map("user_id")
   action     String   @db.VarChar(100)
-  entityType String?  @map("entity_type") @db.VarChar(50)
+  entityType String?  @map("entity_type") @db.VarChar(80)
   entityId   Int?     @map("entity_id")
+  requestId  String?  @map("request_id") @db.VarChar(80)
   oldValues  Json?    @map("old_values")
   newValues  Json?    @map("new_values")
   ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent")
   createdAt  DateTime @default(now()) @map("created_at")
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([action])
+  @@index([entityType, entityId])
   @@index([createdAt(sort: Desc)])
   @@map("audit_logs")
 }
 
-// ── WILAYAH ──────────────────────────────────────────────────────
+model RolePermission {
+  id          Int      @id @default(autoincrement())
+  role        UserRole
+  permission  String   @db.VarChar(120)
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([role, permission])
+  @@index([permission])
+  @@map("role_permissions")
+}
+
+model WilayahAssignment {
+  id          Int              @id @default(autoincrement())
+  userId      Int              @map("user_id")
+  level       WilayahLevel
+  provinsiId  Int?             @map("provinsi_id")
+  kotaId      Int?             @map("kota_id")
+  kecamatanId Int?             @map("kecamatan_id")
+  kelurahanId Int?             @map("kelurahan_id")
+  rwId        Int?             @map("rw_id")
+  rtId        Int?             @map("rt_id")
+  status      AssignmentStatus @default(aktif)
+  notes       String?
+  assignedBy  Int?             @map("assigned_by")
+  assignedAt  DateTime         @default(now()) @map("assigned_at")
+  revokedBy   Int?             @map("revoked_by")
+  revokedAt   DateTime?        @map("revoked_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  user      User       @relation("AssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  assigner  User?      @relation("AssignmentAssignedBy", fields: [assignedBy], references: [id], onDelete: SetNull)
+  revoker   User?      @relation("AssignmentRevokedBy", fields: [revokedBy], references: [id], onDelete: SetNull)
+  provinsi  Provinsi?  @relation(fields: [provinsiId], references: [id], onDelete: Cascade)
+  kota      Kota?      @relation(fields: [kotaId], references: [id], onDelete: Cascade)
+  kecamatan Kecamatan? @relation(fields: [kecamatanId], references: [id], onDelete: Cascade)
+  kelurahan Kelurahan? @relation(fields: [kelurahanId], references: [id], onDelete: Cascade)
+  rw        RW?        @relation(fields: [rwId], references: [id], onDelete: Cascade)
+  rt        RT?        @relation(fields: [rtId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([level, status])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rwId])
+  @@index([rtId])
+  @@map("wilayah_assignments")
+}
+
+// -----------------------------------------------------------------
+// WILAYAH HIERARCHY
+// -----------------------------------------------------------------
 
 model Provinsi {
   id        Int      @id @default(autoincrement())
   nama      String   @unique @db.VarChar(100)
-  kode      String   @unique @db.VarChar(10)
+  kode      String   @unique @db.VarChar(20)
   createdAt DateTime @default(now()) @map("created_at")
-  kota      Kota[]
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  kota         Kota[]
+  assignments  WilayahAssignment[]
+  reports      LaporanWarga[]
+  fieldReports FieldReport[]
+  alerts       OperationalAlert[]
+  sentiments   PublicSentiment[]
+  riskScores   AreaRiskScore[]
+  anomalies    Anomaly[]
 
   @@map("provinsi")
 }
 
 model Kota {
-  id         Int         @id @default(autoincrement())
-  provinsiId Int         @map("provinsi_id")
-  nama       String      @db.VarChar(100)
-  kode       String      @unique @db.VarChar(10)
-  tipe       String      @default("kota") @db.VarChar(20)
-  createdAt  DateTime    @default(now()) @map("created_at")
-  provinsi   Provinsi    @relation(fields: [provinsiId], references: [id])
-  kecamatan  Kecamatan[]
+  id         Int      @id @default(autoincrement())
+  provinsiId Int      @map("provinsi_id")
+  nama       String   @db.VarChar(100)
+  kode       String   @unique @db.VarChar(20)
+  tipe       KotaTipe @default(kota)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  provinsi     Provinsi            @relation(fields: [provinsiId], references: [id], onDelete: Cascade)
+  kecamatan    Kecamatan[]
+  assignments  WilayahAssignment[]
+  reports      LaporanWarga[]
+  fieldReports FieldReport[]
+  alerts       OperationalAlert[]
+  sentiments   PublicSentiment[]
+  riskScores   AreaRiskScore[]
+  anomalies    Anomaly[]
 
   @@unique([provinsiId, nama])
   @@index([provinsiId])
@@ -171,14 +499,26 @@ model Kota {
 }
 
 model Kecamatan {
-  id        Int         @id @default(autoincrement())
-  kotaId    Int         @map("kota_id")
-  nama      String      @db.VarChar(100)
-  kode      String?     @db.VarChar(15)
-  createdAt DateTime    @default(now()) @map("created_at")
-  kota      Kota        @relation(fields: [kotaId], references: [id])
-  kelurahan Kelurahan[]
-  users     User[]
+  id        Int      @id @default(autoincrement())
+  kotaId    Int      @map("kota_id")
+  nama      String   @db.VarChar(100)
+  kode      String?  @unique @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  kota         Kota                @relation(fields: [kotaId], references: [id], onDelete: Cascade)
+  kelurahan    Kelurahan[]
+  users        User[]
+  assignments  WilayahAssignment[]
+  reports      LaporanWarga[]
+  fieldReports FieldReport[]
+  alerts       OperationalAlert[]
+  sentiments   PublicSentiment[]
+  riskScores   AreaRiskScore[]
+  anomalies    Anomaly[]
+  umkm         Umkm[]
+  warung       Warung[]
+  warmindo     WarmindoOutlet[]
 
   @@unique([kotaId, nama])
   @@index([kotaId])
@@ -186,15 +526,27 @@ model Kecamatan {
 }
 
 model Kelurahan {
-  id          Int       @id @default(autoincrement())
-  kecamatanId Int       @map("kecamatan_id")
-  nama        String    @db.VarChar(100)
-  kode        String?   @db.VarChar(15)
-  kodePos     String?   @map("kode_pos") @db.VarChar(10)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  kecamatan   Kecamatan @relation(fields: [kecamatanId], references: [id])
-  rw          RW[]
-  users       User[]
+  id          Int      @id @default(autoincrement())
+  kecamatanId Int      @map("kecamatan_id")
+  nama        String   @db.VarChar(100)
+  kode        String?  @unique @db.VarChar(20)
+  kodePos     String?  @map("kode_pos") @db.VarChar(10)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  kecamatan    Kecamatan           @relation(fields: [kecamatanId], references: [id], onDelete: Cascade)
+  rw           RW[]
+  users        User[]
+  assignments  WilayahAssignment[]
+  reports      LaporanWarga[]
+  fieldReports FieldReport[]
+  alerts       OperationalAlert[]
+  sentiments   PublicSentiment[]
+  riskScores   AreaRiskScore[]
+  anomalies    Anomaly[]
+  umkm         Umkm[]
+  warung       Warung[]
+  warmindo     WarmindoOutlet[]
 
   @@unique([kecamatanId, nama])
   @@index([kecamatanId])
@@ -202,16 +554,27 @@ model Kelurahan {
 }
 
 model RW {
-  id          Int       @id @default(autoincrement())
-  kelurahanId Int       @map("kelurahan_id")
-  nomor       String    @db.VarChar(5)
-  namaKetua   String?   @map("nama_ketua") @db.VarChar(150)
-  noHpKetua   String?   @map("no_hp_ketua") @db.VarChar(20)
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  kelurahan   Kelurahan @relation(fields: [kelurahanId], references: [id])
-  rt          RT[]
-  users       User[]
+  id          Int      @id @default(autoincrement())
+  kelurahanId Int      @map("kelurahan_id")
+  nomor       String   @db.VarChar(5)
+  namaKetua   String?  @map("nama_ketua") @db.VarChar(150)
+  noHpKetua   String?  @map("no_hp_ketua") @db.VarChar(20)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  kelurahan    Kelurahan           @relation(fields: [kelurahanId], references: [id], onDelete: Cascade)
+  rt           RT[]
+  users        User[]
+  assignments  WilayahAssignment[]
+  reports      LaporanWarga[]
+  fieldReports FieldReport[]
+  alerts       OperationalAlert[]
+  sentiments   PublicSentiment[]
+  riskScores   AreaRiskScore[]
+  anomalies    Anomaly[]
+  umkm         Umkm[]
+  warung       Warung[]
+  warmindo     WarmindoOutlet[]
 
   @@unique([kelurahanId, nomor])
   @@index([kelurahanId])
@@ -228,186 +591,460 @@ model RT {
   targetWarga Int      @default(10) @map("target_warga")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
-  rw          RW       @relation(fields: [rwId], references: [id])
-  warga       Warga[]
-  keluarga    Keluarga[]
-  users       User[]
+
+  rw           RW                  @relation(fields: [rwId], references: [id], onDelete: Cascade)
+  warga        Warga[]
+  keluarga     Keluarga[]
+  users        User[]
+  assignments  WilayahAssignment[]
+  reports      LaporanWarga[]
+  fieldReports FieldReport[]
+  alerts       OperationalAlert[]
+  sentiments   PublicSentiment[]
+  riskScores   AreaRiskScore[]
+  anomalies    Anomaly[]
+  umkm         Umkm[]
+  warung       Warung[]
+  warmindo     WarmindoOutlet[]
 
   @@unique([rwId, nomor])
   @@index([rwId])
   @@map("rt")
 }
 
-// ── WARGA ─────────────────────────────────────────────────────────
+// -----------------------------------------------------------------
+// HOUSEHOLDS, RESIDENTS, IDENTITY, AND DEMOGRAPHICS
+// -----------------------------------------------------------------
 
-model Warga {
-  id              Int            @id @default(autoincrement())
-  uuid            String         @unique @default(uuid())
-  rtId            Int            @map("rt_id")
-  kkId            Int?           @map("kk_id")
-  nama            String         @db.VarChar(150)
-  nikHash         String?        @map("nik_hash") @db.VarChar(64)
-  nikEncrypted    String?        @map("nik_encrypted")
-  noHp            String?        @map("no_hp") @db.VarChar(20)
-  jenisKelamin    String?        @map("jenis_kelamin") @db.VarChar(1)
-  tanggalLahir    DateTime?      @map("tanggal_lahir") @db.Date
-  alamat          String?
-  pekerjaan       String?        @db.VarChar(100)
-  penghasilanEst  Float?         @map("penghasilan_est")
-  statusEkonomi   StatusEkonomi? @map("status_ekonomi")
-  kemampuanKerja  Boolean        @default(true) @map("kemampuan_kerja")
-  kebutuhanKhusus String?        @map("kebutuhan_khusus")
-  kategori        String         @default("warga_biasa") @db.VarChar(30)
-  diverifikasi    Boolean        @default(false)
-  catatan         String?
-  fotoUrl         String?        @map("foto_url")
-  deletedAt       DateTime?      @map("deleted_at")
-  createdBy       Int?           @map("created_by")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
+model Keluarga {
+  id                   Int                @id @default(autoincrement())
+  uuid                 String             @unique @default(uuid())
+  rtId                 Int                @map("rt_id")
+  kepalaWargaId        Int?               @map("kepala_warga_id")
+  namaKepala           String             @map("nama_kepala") @db.VarChar(150)
+  noKk                 String?            @unique @map("no_kk") @db.VarChar(32)
+  noKkHash             String?            @unique @map("no_kk_hash") @db.VarChar(64)
+  noKkEncrypted        String?            @map("no_kk_encrypted")
+  noHpKepala           String?            @map("no_hp_kepala") @db.VarChar(20)
+  alamatDetail         String?            @map("alamat_detail")
+  statusRumah          String?            @map("status_rumah") @db.VarChar(40)
+  luasRumahM2          Float?             @map("luas_rumah_m2")
+  jumlahAnggota        Int                @default(1) @map("jumlah_anggota")
+  jumlahTanggungan     Int                @default(0) @map("jumlah_tanggungan")
+  statusEkonomi        StatusEkonomi?     @map("status_ekonomi")
+  totalPenghasilan     Float?             @map("total_penghasilan")
+  totalPengeluaran     Float?             @map("total_pengeluaran")
+  skorPrioritasBantuan Float?             @map("skor_prioritas_bantuan")
+  kategoriBAntuan      String             @default("normal") @map("kategori_bantuan") @db.VarChar(40)
+  terdaftarProgram     String[]           @default([]) @map("terdaftar_program")
+  verificationStatus   VerificationStatus @default(draft) @map("verification_status")
+  verifiedBy           Int?               @map("verified_by")
+  verifiedAt           DateTime?          @map("verified_at")
+  catatan              String?
+  createdBy            Int?               @map("created_by")
+  updatedBy            Int?               @map("updated_by")
+  deletedAt            DateTime?          @map("deleted_at")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
 
-  rt       RT        @relation(fields: [rtId], references: [id])
-  keluarga Keluarga? @relation(fields: [kkId], references: [id])
+  rt              RT                @relation(fields: [rtId], references: [id], onDelete: Restrict)
+  kepalaWarga     Warga?            @relation("KepalaKeluarga", fields: [kepalaWargaId], references: [id], onDelete: SetNull)
+  warga           Warga[]
+  bantuanPenerima BantuanPenerima[]
+  createdByUser   User?             @relation("KeluargaCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  updatedByUser   User?             @relation("KeluargaUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  verifiedByUser  User?             @relation("KeluargaVerifiedBy", fields: [verifiedBy], references: [id], onDelete: SetNull)
 
   @@index([rtId])
-  @@index([nikHash])
+  @@index([kepalaWargaId])
+  @@index([statusEkonomi])
+  @@index([verificationStatus])
+  @@index([skorPrioritasBantuan(sort: Desc)])
+  @@index([deletedAt])
+  @@map("keluarga")
+}
+
+model Warga {
+  id                 Int                @id @default(autoincrement())
+  uuid               String             @unique @default(uuid())
+  rtId               Int                @map("rt_id")
+  kkId               Int?               @map("kk_id")
+  nama               String             @db.VarChar(150)
+  nikHash            String?            @unique @map("nik_hash") @db.VarChar(64)
+  nikEncrypted       String?            @map("nik_encrypted")
+  noHp               String?            @map("no_hp") @db.VarChar(20)
+  email              String?            @db.VarChar(200)
+  jenisKelamin       JenisKelamin?      @map("jenis_kelamin")
+  tempatLahir        String?            @map("tempat_lahir") @db.VarChar(100)
+  tanggalLahir       DateTime?          @map("tanggal_lahir") @db.Date
+  agama              String?            @db.VarChar(40)
+  statusPerkawinan   StatusPerkawinan?  @map("status_perkawinan")
+  hubunganKeluarga   HubunganKeluarga?  @map("hubungan_keluarga")
+  alamat             String?
+  pekerjaan          String?            @db.VarChar(100)
+  pendidikanTerakhir String?            @map("pendidikan_terakhir") @db.VarChar(80)
+  penghasilanEst     Float?             @map("penghasilan_est")
+  statusEkonomi      StatusEkonomi?     @map("status_ekonomi")
+  kemampuanKerja     Boolean            @default(true) @map("kemampuan_kerja")
+  kebutuhanKhusus    String?            @map("kebutuhan_khusus")
+  disabilitas        Boolean            @default(false)
+  kategori           String             @default("warga_biasa") @db.VarChar(40)
+  statusWarga        StatusWarga        @default(aktif) @map("status_warga")
+  verificationStatus VerificationStatus @default(draft) @map("verification_status")
+  diverifikasi       Boolean            @default(false)
+  verifiedBy         Int?               @map("verified_by")
+  verifiedAt         DateTime?          @map("verified_at")
+  consentDataAt      DateTime?          @map("consent_data_at")
+  catatan            String?
+  fotoUrl            String?            @map("foto_url")
+  deletedAt          DateTime?          @map("deleted_at")
+  createdBy          Int?               @map("created_by")
+  updatedBy          Int?               @map("updated_by")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  rt                   RT                         @relation(fields: [rtId], references: [id], onDelete: Restrict)
+  keluarga             Keluarga?                  @relation(fields: [kkId], references: [id], onDelete: SetNull)
+  kepalaKeluarga       Keluarga[]                 @relation("KepalaKeluarga")
+  identity             WargaIdentity?
+  createdByUser        User?                      @relation("WargaCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  updatedByUser        User?                      @relation("WargaUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  verifiedByUser       User?                      @relation("WargaVerifiedBy", fields: [verifiedBy], references: [id], onDelete: SetNull)
+  umkmOwned            Umkm[]                     @relation("UmkmOwner")
+  warungOwned          Warung[]                   @relation("WarungOwner")
+  aidReceived          BantuanPenerima[]          @relation("BantuanPenerimaWarga")
+  fieldReports         FieldReport[]              @relation("FieldReportSubjectWarga")
+  businessTransactions LocalBusinessTransaction[] @relation("BusinessTransactionCounterpartyWarga")
+
+  @@index([rtId])
+  @@index([kkId])
   @@index([nama])
+  @@index([noHp])
+  @@index([statusEkonomi])
+  @@index([statusWarga])
+  @@index([verificationStatus])
   @@index([deletedAt])
   @@map("warga")
 }
 
-model Keluarga {
-  id                   Int            @id @default(autoincrement())
-  rtId                 Int            @map("rt_id")
-  namaKepala           String         @map("nama_kepala") @db.VarChar(150)
-  noKk                 String?        @unique @map("no_kk") @db.VarChar(20)
-  noHpKepala           String?        @map("no_hp_kepala") @db.VarChar(20)
-  jumlahAnggota        Int            @default(1) @map("jumlah_anggota")
-  jumlahTanggungan     Int            @default(0) @map("jumlah_tanggungan")
-  statusRumah          String?        @map("status_rumah") @db.VarChar(30)
-  statusEkonomi        StatusEkonomi? @map("status_ekonomi")
-  totalPenghasilan     Float?         @map("total_penghasilan")
-  skorPrioritasBantuan Float?         @map("skor_prioritas_bantuan")
-  kategoriBAntuan      String         @default("normal") @map("kategori_bantuan") @db.VarChar(30)
-  terdaftarProgram     String[]       @map("terdaftar_program")
-  catatan              String?
-  createdAt            DateTime       @default(now()) @map("created_at")
-  updatedAt            DateTime       @updatedAt @map("updated_at")
+model WargaIdentity {
+  id                  Int                @id @default(autoincrement())
+  wargaId             Int                @unique @map("warga_id")
+  nomorKkHash         String?            @map("nomor_kk_hash") @db.VarChar(64)
+  nomorKkEncrypted    String?            @map("nomor_kk_encrypted")
+  bpjsKesehatanHash   String?            @map("bpjs_kesehatan_hash") @db.VarChar(64)
+  bpjsKesehatanMasked String?            @map("bpjs_kesehatan_masked") @db.VarChar(40)
+  npwpHash            String?            @map("npwp_hash") @db.VarChar(64)
+  npwpMasked          String?            @map("npwp_masked") @db.VarChar(40)
+  documentRefs        Json               @default("[]") @map("document_refs")
+  verificationStatus  VerificationStatus @default(pending) @map("verification_status")
+  verifiedAt          DateTime?          @map("verified_at")
+  createdAt           DateTime           @default(now()) @map("created_at")
+  updatedAt           DateTime           @updatedAt @map("updated_at")
 
-  rt              RT                @relation(fields: [rtId], references: [id])
-  warga           Warga[]
-  bantuanPenerima BantuanPenerima[]
+  warga Warga @relation(fields: [wargaId], references: [id], onDelete: Cascade)
 
-  @@index([rtId])
-  @@index([skorPrioritasBantuan(sort: Desc)])
-  @@map("keluarga")
+  @@index([verificationStatus])
+  @@map("warga_identity")
 }
 
-// ── LAPORAN WARGA ─────────────────────────────────────────────────
+// -----------------------------------------------------------------
+// COMMUNITY REPORTS, FIELD REPORTS, ASSISTANCE, AND ALERTING
+// -----------------------------------------------------------------
 
 model LaporanWarga {
-  id               Int          @id @default(autoincrement())
-  kodeLaporan      String       @unique @map("kode_laporan") @db.VarChar(20)
-  channelType      String       @map("channel_type") @db.VarChar(20)
-  namaPelapor      String?      @map("nama_pelapor") @db.VarChar(150)
-  noHpPelapor      String?      @map("no_hp_pelapor") @db.VarChar(20)
+  id               Int           @id @default(autoincrement())
+  kodeLaporan      String        @unique @map("kode_laporan") @db.VarChar(30)
+  channelType      ReportChannel @default(web) @map("channel_type")
+  namaPelapor      String?       @map("nama_pelapor") @db.VarChar(150)
+  noHpPelapor      String?       @map("no_hp_pelapor") @db.VarChar(20)
   isiLaporan       String
-  kategori         String       @db.VarChar(30)
-  subkategori      String?      @db.VarChar(50)
-  urgencyLevel     UrgencyLevel @default(medium) @map("urgency_level")
-  lokasiText       String?      @map("lokasi_text")
-  rtId             Int?         @map("rt_id")
-  kelurahanId      Int?         @map("kelurahan_id")
-  kecamatanId      Int?         @map("kecamatan_id")
-  isEmergency      Boolean      @default(false) @map("is_emergency")
-  status           ReportStatus @default(baru)
-  aiSummary        String?      @map("ai_summary")
-  aiRecommendation String?      @map("ai_recommendation")
-  lampiranUrls     String[]     @map("lampiran_urls")
-  assignedTo       Int?         @map("assigned_to")
-  slaDeadline      DateTime?    @map("sla_deadline")
-  resolvedAt       DateTime?    @map("resolved_at")
-  createdBy        Int?         @map("created_by")
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
+  kategori         String        @db.VarChar(50)
+  subkategori      String?       @db.VarChar(80)
+  urgencyLevel     UrgencyLevel  @default(medium) @map("urgency_level")
+  lokasiText       String?       @map("lokasi_text")
+  provinsiId       Int?          @map("provinsi_id")
+  kotaId           Int?          @map("kota_id")
+  kecamatanId      Int?          @map("kecamatan_id")
+  kelurahanId      Int?          @map("kelurahan_id")
+  rwId             Int?          @map("rw_id")
+  rtId             Int?          @map("rt_id")
+  isEmergency      Boolean       @default(false) @map("is_emergency")
+  status           ReportStatus  @default(baru)
+  aiSummary        String?       @map("ai_summary")
+  aiRecommendation String?       @map("ai_recommendation")
+  lampiranUrls     String[]      @default([]) @map("lampiran_urls")
+  assignedTo       Int?          @map("assigned_to")
+  slaDeadline      DateTime?     @map("sla_deadline")
+  resolvedAt       DateTime?     @map("resolved_at")
+  createdBy        Int?          @map("created_by")
+  deletedAt        DateTime?     @map("deleted_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
 
-  createdByUser User?            @relation(fields: [createdBy], references: [id])
-  messages      LaporanMessage[]
+  createdByUser   User?                 @relation("LaporanCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  assignedUser    User?                 @relation("LaporanAssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+  provinsi        Provinsi?             @relation(fields: [provinsiId], references: [id], onDelete: SetNull)
+  kota            Kota?                 @relation(fields: [kotaId], references: [id], onDelete: SetNull)
+  kecamatan       Kecamatan?            @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan       Kelurahan?            @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw              RW?                   @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt              RT?                   @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  messages        LaporanMessage[]
+  alerts          OperationalAlert[]
+  sentiments      PublicSentiment[]
+  recommendations AiRecommendationLog[]
 
   @@index([status])
   @@index([urgencyLevel])
   @@index([isEmergency])
-  @@index([rtId])
+  @@index([kecamatanId])
   @@index([kelurahanId])
+  @@index([rwId])
+  @@index([rtId])
+  @@index([assignedTo])
   @@index([createdAt(sort: Desc)])
+  @@index([deletedAt])
   @@map("laporan_warga")
 }
 
 model LaporanMessage {
-  id             Int          @id @default(autoincrement())
-  laporanId      Int          @map("laporan_id")
-  senderType     String       @map("sender_type") @db.VarChar(20)
-  messageText    String       @map("message_text")
-  attachmentUrls String[]     @map("attachment_urls")
-  isInternal     Boolean      @default(false) @map("is_internal")
-  createdAt      DateTime     @default(now()) @map("created_at")
+  id             Int      @id @default(autoincrement())
+  laporanId      Int      @map("laporan_id")
+  senderType     String   @map("sender_type") @db.VarChar(30)
+  messageText    String   @map("message_text")
+  attachmentUrls String[] @default([]) @map("attachment_urls")
+  isInternal     Boolean  @default(false) @map("is_internal")
+  createdBy      Int?     @map("created_by")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  laporan LaporanWarga @relation(fields: [laporanId], references: [id])
+  laporan       LaporanWarga @relation(fields: [laporanId], references: [id], onDelete: Cascade)
+  createdByUser User?        @relation("LaporanMessageCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([laporanId])
+  @@index([createdAt])
   @@map("laporan_messages")
 }
 
-// ── BANTUAN ──────────────────────────────────────────────────────
+model FieldReport {
+  id             Int             @id @default(autoincrement())
+  kodeReport     String          @unique @map("kode_report") @db.VarChar(30)
+  reportType     FieldReportType @map("report_type")
+  title          String          @db.VarChar(200)
+  description    String
+  urgencyLevel   UrgencyLevel    @default(medium) @map("urgency_level")
+  status         ReportStatus    @default(baru)
+  provinsiId     Int?            @map("provinsi_id")
+  kotaId         Int?            @map("kota_id")
+  kecamatanId    Int?            @map("kecamatan_id")
+  kelurahanId    Int?            @map("kelurahan_id")
+  rwId           Int?            @map("rw_id")
+  rtId           Int?            @map("rt_id")
+  subjectWargaId Int?            @map("subject_warga_id")
+  umkmId         Int?            @map("umkm_id")
+  warungId       Int?            @map("warung_id")
+  warmindoId     Int?            @map("warmindo_id")
+  latitude       Float?
+  longitude      Float?
+  evidence       Json            @default("{}")
+  attachmentUrls String[]        @default([]) @map("attachment_urls")
+  assignedTo     Int?            @map("assigned_to")
+  resolvedAt     DateTime?       @map("resolved_at")
+  createdBy      Int?            @map("created_by")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  provinsi        Provinsi?             @relation(fields: [provinsiId], references: [id], onDelete: SetNull)
+  kota            Kota?                 @relation(fields: [kotaId], references: [id], onDelete: SetNull)
+  kecamatan       Kecamatan?            @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan       Kelurahan?            @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw              RW?                   @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt              RT?                   @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  subjectWarga    Warga?                @relation("FieldReportSubjectWarga", fields: [subjectWargaId], references: [id], onDelete: SetNull)
+  umkm            Umkm?                 @relation(fields: [umkmId], references: [id], onDelete: SetNull)
+  warung          Warung?               @relation(fields: [warungId], references: [id], onDelete: SetNull)
+  warmindo        WarmindoOutlet?       @relation(fields: [warmindoId], references: [id], onDelete: SetNull)
+  createdByUser   User?                 @relation("FieldReportCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  assignedUser    User?                 @relation("FieldReportAssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+  alerts          OperationalAlert[]
+  recommendations AiRecommendationLog[]
+
+  @@index([reportType, status])
+  @@index([urgencyLevel])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@index([createdBy])
+  @@index([createdAt(sort: Desc)])
+  @@map("field_reports")
+}
 
 model Bantuan {
-  id             Int       @id @default(autoincrement())
-  nama           String    @db.VarChar(200)
-  tipe           String    @db.VarChar(30)
+  id             Int         @id @default(autoincrement())
+  kodeProgram    String?     @unique @map("kode_program") @db.VarChar(40)
+  nama           String      @db.VarChar(200)
+  tipe           TipeBantuan
   deskripsi      String?
-  satuan         String    @default("paket") @db.VarChar(30)
-  nilaiPerSatuan Float?    @map("nilai_per_satuan")
-  stokTotal      Float     @default(0) @map("stok_total")
-  stokTersisa    Float     @default(0) @map("stok_tersisa")
-  sumber         String?   @db.VarChar(200)
-  tanggalMasuk   DateTime? @map("tanggal_masuk")
-  aktif          Boolean   @default(true)
-  createdAt      DateTime  @default(now()) @map("created_at")
+  satuan         String      @default("paket") @db.VarChar(30)
+  nilaiPerSatuan Float?      @map("nilai_per_satuan")
+  stokTotal      Float       @default(0) @map("stok_total")
+  stokTersisa    Float       @default(0) @map("stok_tersisa")
+  sumber         String?     @db.VarChar(200)
+  periodeMulai   DateTime?   @map("periode_mulai") @db.Date
+  periodeSelesai DateTime?   @map("periode_selesai") @db.Date
+  tanggalMasuk   DateTime?   @map("tanggal_masuk")
+  aktif          Boolean     @default(true)
+  createdBy      Int?        @map("created_by")
+  updatedBy      Int?        @map("updated_by")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
 
   penerima BantuanPenerima[]
 
+  @@index([tipe])
   @@index([aktif])
+  @@index([periodeMulai, periodeSelesai])
   @@map("bantuan")
 }
 
 model BantuanPenerima {
-  id              Int              @id @default(autoincrement())
-  bantuanId       Int              @map("bantuan_id")
-  keluargaId      Int?             @map("keluarga_id")
-  namaPenerima    String           @map("nama_penerima") @db.VarChar(150)
-  rtId            Int?             @map("rt_id")
-  jumlahDiterima  Float            @map("jumlah_diterima")
-  status          DistribusiStatus @default(terjadwal)
-  tanggalDiterima DateTime?        @map("tanggal_diterima")
-  buktiFotoUrl    String?          @map("bukti_foto_url")
-  catatan         String?
-  createdAt       DateTime         @default(now()) @map("created_at")
+  id                 Int                @id @default(autoincrement())
+  bantuanId          Int                @map("bantuan_id")
+  keluargaId         Int?               @map("keluarga_id")
+  wargaId            Int?               @map("warga_id")
+  namaPenerima       String             @map("nama_penerima") @db.VarChar(150)
+  nikHash            String?            @map("nik_hash") @db.VarChar(64)
+  rtId               Int?               @map("rt_id")
+  jumlahDiterima     Float              @map("jumlah_diterima")
+  nilaiDiterima      Float?             @map("nilai_diterima")
+  status             DistribusiStatus   @default(terjadwal)
+  tanggalDiterima    DateTime?          @map("tanggal_diterima")
+  buktiFotoUrl       String?            @map("bukti_foto_url")
+  verificationStatus VerificationStatus @default(pending) @map("verification_status")
+  catatan            String?
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
 
-  bantuan  Bantuan   @relation(fields: [bantuanId], references: [id])
-  keluarga Keluarga? @relation(fields: [keluargaId], references: [id])
+  bantuan  Bantuan   @relation(fields: [bantuanId], references: [id], onDelete: Cascade)
+  keluarga Keluarga? @relation(fields: [keluargaId], references: [id], onDelete: SetNull)
+  warga    Warga?    @relation("BantuanPenerimaWarga", fields: [wargaId], references: [id], onDelete: SetNull)
 
   @@index([bantuanId])
+  @@index([keluargaId])
+  @@index([wargaId])
+  @@index([rtId])
   @@index([status])
+  @@index([verificationStatus])
   @@map("bantuan_penerima")
 }
 
-// ── WARMINDO ─────────────────────────────────────────────────────
+// -----------------------------------------------------------------
+// UMKM, WARUNG, WARMINDO, TRANSACTIONS, AND SUPPLY CHAIN
+// -----------------------------------------------------------------
+
+model Umkm {
+  id            Int            @id @default(autoincrement())
+  uuid          String         @unique @default(uuid())
+  kodeUmkm      String         @unique @map("kode_umkm") @db.VarChar(30)
+  namaUsaha     String         @map("nama_usaha") @db.VarChar(200)
+  sektor        String         @db.VarChar(80)
+  skala         BusinessScale  @default(mikro)
+  status        BusinessStatus @default(aktif)
+  ownerWargaId  Int?           @map("owner_warga_id")
+  namaPemilik   String?        @map("nama_pemilik") @db.VarChar(150)
+  noHp          String?        @map("no_hp") @db.VarChar(20)
+  kecamatanId   Int?           @map("kecamatan_id")
+  kelurahanId   Int?           @map("kelurahan_id")
+  rwId          Int?           @map("rw_id")
+  rtId          Int?           @map("rt_id")
+  alamat        String?
+  latitude      Float?
+  longitude     Float?
+  legalitas     String[]       @default([])
+  jumlahPekerja Int            @default(0) @map("jumlah_pekerja")
+  omzetBulanan  Float?         @map("omzet_bulanan")
+  modalBerjalan Float?         @map("modal_berjalan")
+  kebutuhan     String?
+  riskScore     Float?         @map("risk_score")
+  createdBy     Int?           @map("created_by")
+  updatedBy     Int?           @map("updated_by")
+  deletedAt     DateTime?      @map("deleted_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  owner        Warga?                     @relation("UmkmOwner", fields: [ownerWargaId], references: [id], onDelete: SetNull)
+  kecamatan    Kecamatan?                 @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan    Kelurahan?                 @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw           RW?                        @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt           RT?                        @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  transactions LocalBusinessTransaction[]
+  supplyLinks  SupplyChainLink[]          @relation("SupplyBuyerUmkm")
+  fieldReports FieldReport[]
+
+  @@index([status])
+  @@index([sektor])
+  @@index([ownerWargaId])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@index([deletedAt])
+  @@map("umkm")
+}
+
+model Warung {
+  id             Int            @id @default(autoincrement())
+  uuid           String         @unique @default(uuid())
+  kodeWarung     String         @unique @map("kode_warung") @db.VarChar(30)
+  namaWarung     String         @map("nama_warung") @db.VarChar(200)
+  tipeWarung     String         @default("warung_sembako") @map("tipe_warung") @db.VarChar(80)
+  status         BusinessStatus @default(aktif)
+  ownerWargaId   Int?           @map("owner_warga_id")
+  namaPemilik    String?        @map("nama_pemilik") @db.VarChar(150)
+  noHp           String?        @map("no_hp") @db.VarChar(20)
+  kecamatanId    Int?           @map("kecamatan_id")
+  kelurahanId    Int?           @map("kelurahan_id")
+  rwId           Int?           @map("rw_id")
+  rtId           Int?           @map("rt_id")
+  alamat         String?
+  latitude       Float?
+  longitude      Float?
+  jumlahPekerja  Int            @default(0) @map("jumlah_pekerja")
+  omzetHarianEst Float?         @map("omzet_harian_est")
+  stokKritis     Boolean        @default(false) @map("stok_kritis")
+  kebutuhan      String?
+  createdBy      Int?           @map("created_by")
+  updatedBy      Int?           @map("updated_by")
+  deletedAt      DateTime?      @map("deleted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  owner        Warga?                     @relation("WarungOwner", fields: [ownerWargaId], references: [id], onDelete: SetNull)
+  kecamatan    Kecamatan?                 @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan    Kelurahan?                 @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw           RW?                        @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt           RT?                        @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  transactions LocalBusinessTransaction[]
+  supplyLinks  SupplyChainLink[]          @relation("SupplyBuyerWarung")
+  fieldReports FieldReport[]
+
+  @@index([status])
+  @@index([tipeWarung])
+  @@index([ownerWargaId])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@index([deletedAt])
+  @@map("warung")
+}
 
 model WarmindoOutlet {
   id                Int            @id @default(autoincrement())
-  kodeOutlet        String         @unique @map("kode_outlet") @db.VarChar(20)
+  uuid              String         @unique @default(uuid())
+  kodeOutlet        String         @unique @map("kode_outlet") @db.VarChar(30)
   namaOutlet        String         @map("nama_outlet") @db.VarChar(200)
+  kecamatanId       Int?           @map("kecamatan_id")
   kelurahanId       Int?           @map("kelurahan_id")
+  rwId              Int?           @map("rw_id")
   rtId              Int?           @map("rt_id")
   alamat            String?
   koordinatLat      Float?         @map("koordinat_lat")
@@ -420,54 +1057,80 @@ model WarmindoOutlet {
   karyawanTotal     Int            @default(0) @map("karyawan_total")
   managerUserId     Int?           @map("manager_user_id")
   aktif             Boolean        @default(true)
-  tanggalBuka       DateTime?      @map("tanggal_buka")
+  tanggalBuka       DateTime?      @map("tanggal_buka") @db.Date
+  createdBy         Int?           @map("created_by")
+  updatedBy         Int?           @map("updated_by")
+  deletedAt         DateTime?      @map("deleted_at")
   createdAt         DateTime       @default(now()) @map("created_at")
   updatedAt         DateTime       @updatedAt @map("updated_at")
 
-  inventory   WarmindoInventory[]
-  transaksi   WarmindoTransaksi[]
-  pengeluaran WarmindoPengeluaran[]
+  kecamatan   Kecamatan? @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan   Kelurahan? @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw          RW?        @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt          RT?        @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  manager     User?      @relation("WarmindoManager", fields: [managerUserId], references: [id], onDelete: SetNull)
+  scopedUsers User[]     @relation("UserWarmindoScope")
+
+  inventory         WarmindoInventory[]
+  transaksi         WarmindoTransaksi[]
+  pengeluaran       WarmindoPengeluaran[]
+  localTransactions LocalBusinessTransaction[]
+  supplyLinks       SupplyChainLink[]          @relation("SupplyBuyerWarmindo")
+  fieldReports      FieldReport[]
 
   @@index([status])
   @@index([aktif])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@index([managerUserId])
+  @@index([deletedAt])
   @@map("warmindo_outlet")
 }
 
 model WarmindoInventory {
-  id          Int    @id @default(autoincrement())
-  warmindoId  Int    @map("warmindo_id")
-  namaBahan   String @map("nama_bahan") @db.VarChar(200)
-  satuan      String @default("pcs") @db.VarChar(20)
-  stokSaatIni Float  @default(0) @map("stok_saat_ini")
-  stokMinimum Float  @default(0) @map("stok_minimum")
-  hargaBeli   Float  @default(0) @map("harga_beli")
-  hargaJual   Float  @default(0) @map("harga_jual")
+  id          Int      @id @default(autoincrement())
+  warmindoId  Int      @map("warmindo_id")
+  namaBahan   String   @map("nama_bahan") @db.VarChar(200)
+  sku         String?  @db.VarChar(60)
+  satuan      String   @default("pcs") @db.VarChar(30)
+  stokSaatIni Float    @default(0) @map("stok_saat_ini")
+  stokMinimum Float    @default(0) @map("stok_minimum")
+  hargaBeli   Float    @default(0) @map("harga_beli")
+  hargaJual   Float    @default(0) @map("harga_jual")
+  supplierId  Int?     @map("supplier_id")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  warmindo WarmindoOutlet @relation(fields: [warmindoId], references: [id])
+  warmindo WarmindoOutlet @relation(fields: [warmindoId], references: [id], onDelete: Cascade)
+  supplier Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   @@unique([warmindoId, namaBahan])
   @@index([warmindoId])
+  @@index([supplierId])
+  @@index([stokSaatIni])
   @@map("warmindo_inventory")
 }
 
 model WarmindoTransaksi {
-  id          Int      @id @default(autoincrement())
-  warmindoId  Int      @map("warmindo_id")
-  tanggal     DateTime @default(now())
-  totalOmzet  Float    @default(0) @map("total_omzet")
-  totalHpp    Float    @default(0) @map("total_hpp")
-  grossProfit Float    @default(0) @map("gross_profit")
-  jumlahItem  Int      @default(0) @map("jumlah_item")
-  metodeBayar String   @default("tunai") @map("metode_bayar") @db.VarChar(20)
-  items       Json     @default("[]")
+  id          Int           @id @default(autoincrement())
+  warmindoId  Int           @map("warmindo_id")
+  tanggal     DateTime      @default(now())
+  totalOmzet  Float         @default(0) @map("total_omzet")
+  totalHpp    Float         @default(0) @map("total_hpp")
+  grossProfit Float         @default(0) @map("gross_profit")
+  jumlahItem  Int           @default(0) @map("jumlah_item")
+  metodeBayar PaymentMethod @default(tunai) @map("metode_bayar")
+  items       Json          @default("[]")
   catatan     String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  kasirId     Int?          @map("kasir_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
 
-  warmindo WarmindoOutlet @relation(fields: [warmindoId], references: [id])
+  warmindo WarmindoOutlet @relation(fields: [warmindoId], references: [id], onDelete: Cascade)
+  kasir    User?          @relation("WarmindoKasir", fields: [kasirId], references: [id], onDelete: SetNull)
 
   @@index([warmindoId, tanggal(sort: Desc)])
   @@index([tanggal(sort: Desc)])
+  @@index([kasirId])
   @@map("warmindo_transaksi")
 }
 
@@ -475,85 +1138,404 @@ model WarmindoPengeluaran {
   id         Int      @id @default(autoincrement())
   warmindoId Int      @map("warmindo_id")
   tanggal    DateTime @default(now())
-  kategori   String   @db.VarChar(30)
+  kategori   String   @db.VarChar(50)
   deskripsi  String   @db.VarChar(300)
   jumlah     Float
+  buktiFoto  String?  @map("bukti_foto")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  warmindo WarmindoOutlet @relation(fields: [warmindoId], references: [id])
+  warmindo WarmindoOutlet @relation(fields: [warmindoId], references: [id], onDelete: Cascade)
 
   @@index([warmindoId, tanggal(sort: Desc)])
+  @@index([kategori])
   @@map("warmindo_pengeluaran")
 }
 
-// ── FILES ─────────────────────────────────────────────────────────
+model Supplier {
+  id         Int             @id @default(autoincrement())
+  uuid       String          @unique @default(uuid())
+  nama       String          @db.VarChar(200)
+  role       SupplyChainRole @default(supplier)
+  kontakNama String?         @map("kontak_nama") @db.VarChar(150)
+  noHp       String?         @map("no_hp") @db.VarChar(20)
+  alamat     String?
+  komoditas  String[]        @default([])
+  rating     Float?
+  aktif      Boolean         @default(true)
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
 
-model File {
-  id           Int      @id @default(autoincrement())
-  uuid         String   @unique @default(uuid())
-  originalName String   @map("original_name") @db.VarChar(255)
-  storedName   String   @map("stored_name") @db.VarChar(255)
-  mimeType     String   @map("mime_type") @db.VarChar(100)
-  sizeBytes    Int      @map("size_bytes")
-  storagePath  String   @map("storage_path")
-  isPublic     Boolean  @default(false) @map("is_public")
-  entityType   String?  @map("entity_type") @db.VarChar(50)
-  entityId     Int?     @map("entity_id")
-  uploadedBy   Int?     @map("uploaded_by")
-  createdAt    DateTime @default(now()) @map("created_at")
+  inventory    WarmindoInventory[]
+  transactions LocalBusinessTransaction[]
+  supplyLinks  SupplyChainLink[]
 
-  @@index([entityType, entityId])
-  @@map("files")
+  @@index([aktif])
+  @@index([role])
+  @@map("suppliers")
 }
 
-// ── AI ENGINE ─────────────────────────────────────────────────────
+model LocalBusinessTransaction {
+  id                  Int                     @id @default(autoincrement())
+  kodeTransaksi       String?                 @unique @map("kode_transaksi") @db.VarChar(40)
+  transactionType     BusinessTransactionType @map("transaction_type")
+  tanggal             DateTime                @default(now())
+  umkmId              Int?                    @map("umkm_id")
+  warungId            Int?                    @map("warung_id")
+  warmindoId          Int?                    @map("warmindo_id")
+  supplierId          Int?                    @map("supplier_id")
+  counterpartyWargaId Int?                    @map("counterparty_warga_id")
+  kategori            String?                 @db.VarChar(80)
+  deskripsi           String?
+  quantity            Float                   @default(1)
+  satuan              String?                 @db.VarChar(30)
+  totalAmount         Float                   @default(0) @map("total_amount")
+  paymentMethod       PaymentMethod           @default(tunai) @map("payment_method")
+  items               Json                    @default("[]")
+  marginEst           Float?                  @map("margin_est")
+  recordedBy          Int?                    @map("recorded_by")
+  createdAt           DateTime                @default(now()) @map("created_at")
+
+  umkm              Umkm?           @relation(fields: [umkmId], references: [id], onDelete: SetNull)
+  warung            Warung?         @relation(fields: [warungId], references: [id], onDelete: SetNull)
+  warmindo          WarmindoOutlet? @relation(fields: [warmindoId], references: [id], onDelete: SetNull)
+  supplier          Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  counterpartyWarga Warga?          @relation("BusinessTransactionCounterpartyWarga", fields: [counterpartyWargaId], references: [id], onDelete: SetNull)
+  recorder          User?           @relation("BusinessTransactionRecordedBy", fields: [recordedBy], references: [id], onDelete: SetNull)
+
+  @@index([transactionType])
+  @@index([tanggal(sort: Desc)])
+  @@index([umkmId, tanggal(sort: Desc)])
+  @@index([warungId, tanggal(sort: Desc)])
+  @@index([warmindoId, tanggal(sort: Desc)])
+  @@index([supplierId])
+  @@map("local_business_transactions")
+}
+
+model SupplyChainLink {
+  id               Int      @id @default(autoincrement())
+  supplierId       Int      @map("supplier_id")
+  umkmId           Int?     @map("umkm_id")
+  warungId         Int?     @map("warung_id")
+  warmindoId       Int?     @map("warmindo_id")
+  komoditas        String   @db.VarChar(120)
+  satuan           String   @default("pcs") @db.VarChar(30)
+  hargaAcuan       Float?   @map("harga_acuan")
+  leadTimeHari     Int?     @map("lead_time_hari")
+  minimumOrder     Float?   @map("minimum_order")
+  reliabilityScore Float?   @map("reliability_score")
+  aktif            Boolean  @default(true)
+  catatan          String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  supplier Supplier        @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  umkm     Umkm?           @relation("SupplyBuyerUmkm", fields: [umkmId], references: [id], onDelete: SetNull)
+  warung   Warung?         @relation("SupplyBuyerWarung", fields: [warungId], references: [id], onDelete: SetNull)
+  warmindo WarmindoOutlet? @relation("SupplyBuyerWarmindo", fields: [warmindoId], references: [id], onDelete: SetNull)
+
+  @@index([supplierId])
+  @@index([umkmId])
+  @@index([warungId])
+  @@index([warmindoId])
+  @@index([komoditas])
+  @@index([aktif])
+  @@map("supply_chain_links")
+}
+
+// -----------------------------------------------------------------
+// OPERATIONAL INTELLIGENCE
+// -----------------------------------------------------------------
+
+model OperationalAlert {
+  id             Int          @id @default(autoincrement())
+  kodeAlert      String       @unique @map("kode_alert") @db.VarChar(40)
+  alertType      AlertType    @map("alert_type")
+  title          String       @db.VarChar(200)
+  message        String
+  severity       UrgencyLevel @default(medium)
+  status         AlertStatus  @default(open)
+  provinsiId     Int?         @map("provinsi_id")
+  kotaId         Int?         @map("kota_id")
+  kecamatanId    Int?         @map("kecamatan_id")
+  kelurahanId    Int?         @map("kelurahan_id")
+  rwId           Int?         @map("rw_id")
+  rtId           Int?         @map("rt_id")
+  laporanWargaId Int?         @map("laporan_warga_id")
+  fieldReportId  Int?         @map("field_report_id")
+  anomalyId      Int?         @map("anomaly_id")
+  source         String?      @db.VarChar(80)
+  metadata       Json         @default("{}")
+  acknowledgedBy Int?         @map("acknowledged_by")
+  acknowledgedAt DateTime?    @map("acknowledged_at")
+  escalatedTo    Int?         @map("escalated_to")
+  resolvedBy     Int?         @map("resolved_by")
+  resolvedAt     DateTime?    @map("resolved_at")
+  createdBy      Int?         @map("created_by")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  provinsi        Provinsi?             @relation(fields: [provinsiId], references: [id], onDelete: SetNull)
+  kota            Kota?                 @relation(fields: [kotaId], references: [id], onDelete: SetNull)
+  kecamatan       Kecamatan?            @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan       Kelurahan?            @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw              RW?                   @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt              RT?                   @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  laporanWarga    LaporanWarga?         @relation(fields: [laporanWargaId], references: [id], onDelete: SetNull)
+  fieldReport     FieldReport?          @relation(fields: [fieldReportId], references: [id], onDelete: SetNull)
+  anomaly         Anomaly?              @relation(fields: [anomalyId], references: [id], onDelete: SetNull)
+  creator         User?                 @relation("AlertCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  acknowledger    User?                 @relation("AlertAcknowledgedBy", fields: [acknowledgedBy], references: [id], onDelete: SetNull)
+  resolver        User?                 @relation("AlertResolvedBy", fields: [resolvedBy], references: [id], onDelete: SetNull)
+  escalatedUser   User?                 @relation("AlertEscalatedTo", fields: [escalatedTo], references: [id], onDelete: SetNull)
+  recommendations AiRecommendationLog[]
+
+  @@index([alertType, status])
+  @@index([severity])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@index([createdAt(sort: Desc)])
+  @@map("operational_alerts")
+}
+
+model PublicSentiment {
+  id             Int               @id @default(autoincrement())
+  source         SentimentSource
+  externalRef    String?           @map("external_ref") @db.VarChar(120)
+  polarity       SentimentPolarity
+  intensityScore Float?            @map("intensity_score")
+  topic          String            @db.VarChar(120)
+  message        String?
+  normalizedText String?           @map("normalized_text")
+  keywords       String[]          @default([])
+  provinsiId     Int?              @map("provinsi_id")
+  kotaId         Int?              @map("kota_id")
+  kecamatanId    Int?              @map("kecamatan_id")
+  kelurahanId    Int?              @map("kelurahan_id")
+  rwId           Int?              @map("rw_id")
+  rtId           Int?              @map("rt_id")
+  laporanWargaId Int?              @map("laporan_warga_id")
+  observedAt     DateTime          @default(now()) @map("observed_at")
+  createdAt      DateTime          @default(now()) @map("created_at")
+
+  provinsi     Provinsi?     @relation(fields: [provinsiId], references: [id], onDelete: SetNull)
+  kota         Kota?         @relation(fields: [kotaId], references: [id], onDelete: SetNull)
+  kecamatan    Kecamatan?    @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan    Kelurahan?    @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw           RW?           @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt           RT?           @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  laporanWarga LaporanWarga? @relation(fields: [laporanWargaId], references: [id], onDelete: SetNull)
+
+  @@index([source])
+  @@index([polarity])
+  @@index([topic])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([observedAt(sort: Desc)])
+  @@map("public_sentiment")
+}
+
+model AreaRiskScore {
+  id              Int          @id @default(autoincrement())
+  riskCategory    RiskCategory @map("risk_category")
+  wilayahLevel    WilayahLevel @map("wilayah_level")
+  provinsiId      Int?         @map("provinsi_id")
+  kotaId          Int?         @map("kota_id")
+  kecamatanId     Int?         @map("kecamatan_id")
+  kelurahanId     Int?         @map("kelurahan_id")
+  rwId            Int?         @map("rw_id")
+  rtId            Int?         @map("rt_id")
+  score           Float
+  scorePrevious   Float?       @map("score_previous")
+  confidence      Float?       @default(0.5)
+  drivers         Json         @default("[]")
+  recommendations Json         @default("[]")
+  periodStart     DateTime     @map("period_start") @db.Date
+  periodEnd       DateTime     @map("period_end") @db.Date
+  generatedBy     String?      @map("generated_by") @db.VarChar(80)
+  generatedAt     DateTime     @default(now()) @map("generated_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  provinsi           Provinsi?             @relation(fields: [provinsiId], references: [id], onDelete: SetNull)
+  kota               Kota?                 @relation(fields: [kotaId], references: [id], onDelete: SetNull)
+  kecamatan          Kecamatan?            @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan          Kelurahan?            @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw                 RW?                   @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt                 RT?                   @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  anomalies          Anomaly[]
+  recommendationsLog AiRecommendationLog[]
+
+  @@index([riskCategory])
+  @@index([wilayahLevel])
+  @@index([score(sort: Desc)])
+  @@index([periodStart, periodEnd])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@map("area_risk_scores")
+}
+
+model Anomaly {
+  id              Int          @id @default(autoincrement())
+  kodeAnomaly     String       @unique @map("kode_anomaly") @db.VarChar(40)
+  anomalyType     AnomalyType  @map("anomaly_type")
+  severity        UrgencyLevel @default(medium)
+  status          AlertStatus  @default(open)
+  title           String       @db.VarChar(200)
+  description     String
+  evidence        Json         @default("{}")
+  detectedAt      DateTime     @default(now()) @map("detected_at")
+  provinsiId      Int?         @map("provinsi_id")
+  kotaId          Int?         @map("kota_id")
+  kecamatanId     Int?         @map("kecamatan_id")
+  kelurahanId     Int?         @map("kelurahan_id")
+  rwId            Int?         @map("rw_id")
+  rtId            Int?         @map("rt_id")
+  areaRiskScoreId Int?         @map("area_risk_score_id")
+  assignedTo      Int?         @map("assigned_to")
+  resolvedAt      DateTime?    @map("resolved_at")
+  createdBy       Int?         @map("created_by")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  provinsi        Provinsi?             @relation(fields: [provinsiId], references: [id], onDelete: SetNull)
+  kota            Kota?                 @relation(fields: [kotaId], references: [id], onDelete: SetNull)
+  kecamatan       Kecamatan?            @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
+  kelurahan       Kelurahan?            @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
+  rw              RW?                   @relation(fields: [rwId], references: [id], onDelete: SetNull)
+  rt              RT?                   @relation(fields: [rtId], references: [id], onDelete: SetNull)
+  areaRiskScore   AreaRiskScore?        @relation(fields: [areaRiskScoreId], references: [id], onDelete: SetNull)
+  creator         User?                 @relation("AnomalyCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  assignee        User?                 @relation("AnomalyAssignedTo", fields: [assignedTo], references: [id], onDelete: SetNull)
+  alerts          OperationalAlert[]
+  recommendations AiRecommendationLog[]
+
+  @@index([anomalyType, status])
+  @@index([severity])
+  @@index([detectedAt(sort: Desc)])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@map("anomalies")
+}
 
 model AiTask {
   id           Int          @id @default(autoincrement())
-  tipe         String       @db.VarChar(50)
+  tipe         String       @db.VarChar(80)
   inputData    Json         @map("input_data")
   outputData   Json?        @map("output_data")
   status       AiTaskStatus @default(pending)
   errorMessage String?      @map("error_message")
-  modelUsed    String?      @map("model_used") @db.VarChar(50)
+  modelUsed    String?      @map("model_used") @db.VarChar(80)
   createdBy    Int?         @map("created_by")
   startedAt    DateTime?    @map("started_at")
   doneAt       DateTime?    @map("done_at")
   createdAt    DateTime     @default(now()) @map("created_at")
 
-  createdByUser User? @relation(fields: [createdBy], references: [id])
+  createdByUser User? @relation("AiTaskCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([tipe])
   @@index([createdAt(sort: Desc)])
   @@map("ai_tasks")
 }
 
-model AiReport {
-  id          Int      @id @default(autoincrement())
-  tipe        String   @db.VarChar(50)
-  wilayahLevel String? @map("wilayah_level") @db.VarChar(20)
-  wilayahId   Int?     @map("wilayah_id")
-  tanggal     DateTime @default(now())
-  ringkasan   String
-  temuan      Json     @default("[]")
-  rekomendasi Json     @default("[]")
-  createdAt   DateTime @default(now()) @map("created_at")
+model AiRecommendationLog {
+  id                 Int                    @id @default(autoincrement())
+  useCase            String                 @map("use_case") @db.VarChar(100)
+  modelUsed          String?                @map("model_used") @db.VarChar(80)
+  promptVersion      String?                @map("prompt_version") @db.VarChar(60)
+  inputRefType       String?                @map("input_ref_type") @db.VarChar(80)
+  inputRefId         Int?                   @map("input_ref_id")
+  laporanWargaId     Int?                   @map("laporan_warga_id")
+  fieldReportId      Int?                   @map("field_report_id")
+  operationalAlertId Int?                   @map("operational_alert_id")
+  anomalyId          Int?                   @map("anomaly_id")
+  areaRiskScoreId    Int?                   @map("area_risk_score_id")
+  inputData          Json?                  @map("input_data")
+  recommendation     Json                   @default("{}")
+  rationale          String?
+  status             AiRecommendationStatus @default(proposed)
+  confidence         Float?
+  createdBy          Int?                   @map("created_by")
+  reviewedBy         Int?                   @map("reviewed_by")
+  reviewedAt         DateTime?              @map("reviewed_at")
+  appliedAt          DateTime?              @map("applied_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
 
+  laporanWarga     LaporanWarga?     @relation(fields: [laporanWargaId], references: [id], onDelete: SetNull)
+  fieldReport      FieldReport?      @relation(fields: [fieldReportId], references: [id], onDelete: SetNull)
+  operationalAlert OperationalAlert? @relation(fields: [operationalAlertId], references: [id], onDelete: SetNull)
+  anomaly          Anomaly?          @relation(fields: [anomalyId], references: [id], onDelete: SetNull)
+  areaRiskScore    AreaRiskScore?    @relation(fields: [areaRiskScoreId], references: [id], onDelete: SetNull)
+  creator          User?             @relation("AiRecommendationCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  reviewer         User?             @relation("AiRecommendationReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([useCase])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@index([laporanWargaId])
+  @@index([fieldReportId])
+  @@index([operationalAlertId])
+  @@index([anomalyId])
+  @@map("ai_recommendation_logs")
+}
+
+model AiReport {
+  id           Int      @id @default(autoincrement())
+  tipe         String   @db.VarChar(80)
+  wilayahLevel String?  @map("wilayah_level") @db.VarChar(20)
+  wilayahId    Int?     @map("wilayah_id")
+  tanggal      DateTime @default(now())
+  ringkasan    String
+  temuan       Json     @default("[]")
+  rekomendasi  Json     @default("[]")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([tipe])
   @@index([createdAt(sort: Desc)])
   @@map("ai_reports")
 }
 
+// -----------------------------------------------------------------
+// FILES AND EXISTING APPLICATION MODULES
+// -----------------------------------------------------------------
+
+model File {
+  id           Int            @id @default(autoincrement())
+  uuid         String         @unique @default(uuid())
+  originalName String         @map("original_name") @db.VarChar(255)
+  storedName   String         @map("stored_name") @db.VarChar(255)
+  mimeType     String         @map("mime_type") @db.VarChar(100)
+  sizeBytes    Int            @map("size_bytes")
+  storagePath  String         @map("storage_path")
+  visibility   FileVisibility @default(private)
+  isPublic     Boolean        @default(false) @map("is_public")
+  entityType   String?        @map("entity_type") @db.VarChar(80)
+  entityId     Int?           @map("entity_id")
+  uploadedBy   Int?           @map("uploaded_by")
+  checksum     String?        @db.VarChar(128)
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  uploader User? @relation("FileUploadedBy", fields: [uploadedBy], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([uploadedBy])
+  @@map("files")
+}
+
 model DesignJob {
   id               Int          @id @default(autoincrement())
-  tipe             String       @db.VarChar(30)
-  platform         String       @db.VarChar(30)
+  tipe             String       @db.VarChar(40)
+  platform         String       @db.VarChar(40)
   inputData        Json         @map("input_data")
   generatedText    String?      @map("generated_text")
+  generatedFileUrl String?      @map("generated_file_url")
   status           AiTaskStatus @default(pending)
   createdBy        Int?         @map("created_by")
   createdAt        DateTime     @default(now()) @map("created_at")
 
-  createdByUser User? @relation(fields: [createdBy], references: [id])
+  createdByUser User? @relation("DesignJobCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
 
   @@index([status])
   @@map("design_jobs")
@@ -563,6 +1545,7 @@ model VideoJob {
   id          Int          @id @default(autoincrement())
   judul       String       @db.VarChar(200)
   script      String
+  heygenJobId String?      @map("heygen_job_id")
   videoUrl    String?      @map("video_url")
   status      AiTaskStatus @default(pending)
   createdBy   Int?         @map("created_by")
@@ -571,39 +1554,41 @@ model VideoJob {
   @@map("video_jobs")
 }
 
-// ── TPS / QUICK COUNT ─────────────────────────────────────────────
-
 model ElectionEvent {
   id               Int      @id @default(autoincrement())
   namaEvent        String   @map("nama_event") @db.VarChar(200)
-  jenisEvent       String   @map("jenis_event") @db.VarChar(30)
+  jenisEvent       String   @map("jenis_event") @db.VarChar(40)
   tanggalPemilihan DateTime @map("tanggal_pemilihan") @db.Date
   kecamatanId      Int?     @map("kecamatan_id")
-  status           String   @default("persiapan") @db.VarChar(20)
+  status           String   @default("persiapan") @db.VarChar(30)
   kontestan        Json     @default("[]")
   createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
 
   tps     Tps[]
   results TpsResult[]
 
+  @@index([status])
   @@map("election_events")
 }
 
 model Tps {
-  id          Int    @id @default(autoincrement())
-  kodeTps     String @map("kode_tps") @db.VarChar(20)
-  electionId  Int    @map("election_id")
-  rtId        Int?   @map("rt_id")
-  kelurahanId Int?   @map("kelurahan_id")
-  kecamatanId Int?   @map("kecamatan_id")
+  id          Int      @id @default(autoincrement())
+  kodeTps     String   @map("kode_tps") @db.VarChar(30)
+  electionId  Int      @map("election_id")
+  rtId        Int?     @map("rt_id")
+  kelurahanId Int?     @map("kelurahan_id")
+  kecamatanId Int?     @map("kecamatan_id")
   alamat      String?
-  jumlahDpt   Int    @default(0) @map("jumlah_dpt")
+  jumlahDpt   Int      @default(0) @map("jumlah_dpt")
   createdAt   DateTime @default(now()) @map("created_at")
 
-  election ElectionEvent @relation(fields: [electionId], references: [id])
+  election ElectionEvent @relation(fields: [electionId], references: [id], onDelete: Cascade)
   results  TpsResult[]
 
+  @@unique([electionId, kodeTps])
   @@index([electionId])
+  @@index([kelurahanId])
   @@map("tps")
 }
 
@@ -616,20 +1601,20 @@ model TpsResult {
   suaraTidakSah  Int      @default(0) @map("suara_tidak_sah")
   hasilSuara     Json     @default("{}") @map("hasil_suara")
   buktiFotoUrl   String?  @map("bukti_foto_url")
-  status         String   @default("draft") @db.VarChar(20)
+  status         String   @default("draft") @db.VarChar(30)
   inputBy        Int?     @map("input_by")
   verifiedBy     Int?     @map("verified_by")
   createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  tps      Tps           @relation(fields: [tpsId], references: [id])
-  election ElectionEvent @relation(fields: [electionId], references: [id])
+  tps      Tps           @relation(fields: [tpsId], references: [id], onDelete: Cascade)
+  election ElectionEvent @relation(fields: [electionId], references: [id], onDelete: Cascade)
 
   @@unique([tpsId, electionId])
   @@index([electionId])
+  @@index([status])
   @@map("tps_results")
 }
-
-// ── PUBLIC OFFICIAL ───────────────────────────────────────────────
 
 model PublicOfficial {
   id               Int      @id @default(autoincrement())
@@ -644,35 +1629,38 @@ model PublicOfficial {
   komisi           String?  @db.VarChar(100)
   dapil            String?  @db.VarChar(200)
   periode          String?  @db.VarChar(50)
-  fokusKomisi      String[] @map("fokus_komisi")
+  fokusKomisi      String[] @default([]) @map("fokus_komisi")
   waAspirasi       String?  @map("wa_aspirasi") @db.VarChar(20)
   instagram        String?  @db.VarChar(100)
   bioSingkat       String?  @map("bio_singkat")
   visi             String?
-  misi             String[]
+  misi             String[] @default([])
   aktif            Boolean  @default(true)
   createdAt        DateTime @default(now()) @map("created_at")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   aspirasi OfficialAspirasi[]
 
+  @@index([aktif])
   @@map("public_officials")
 }
 
 model OfficialAspirasi {
-  id            Int    @id @default(autoincrement())
-  officialId    Int    @map("official_id")
-  namaPelapor   String? @map("nama_pelapor") @db.VarChar(150)
-  noHp          String? @db.VarChar(20)
-  wilayah       String? @db.VarChar(200)
-  judulAspirasi String  @map("judul_aspirasi") @db.VarChar(300)
-  isiAspirasi   String  @map("isi_aspirasi")
-  kategori      String? @db.VarChar(50)
-  status        String  @default("diterima") @db.VarChar(20)
+  id            Int      @id @default(autoincrement())
+  officialId    Int      @map("official_id")
+  namaPelapor   String?  @map("nama_pelapor") @db.VarChar(150)
+  noHp          String?  @db.VarChar(20)
+  wilayah       String?  @db.VarChar(200)
+  judulAspirasi String   @map("judul_aspirasi") @db.VarChar(300)
+  isiAspirasi   String   @map("isi_aspirasi")
+  kategori      String?  @db.VarChar(80)
+  status        String   @default("diterima") @db.VarChar(30)
   createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  official PublicOfficial @relation(fields: [officialId], references: [id])
+  official PublicOfficial @relation(fields: [officialId], references: [id], onDelete: Cascade)
 
   @@index([officialId])
+  @@index([status])
   @@map("official_aspirasi")
 }

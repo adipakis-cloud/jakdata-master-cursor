@@ -30,7 +30,7 @@ export async function tpsRoutes(app: FastifyInstance) {
   app.post('/list', { preHandler: [app.authenticate] }, async (req, reply) => {
     const body = req.body as any;
     const tps = await prisma.tps.create({
-      data: { kodeTps: body.kodeTps, electionId: +body.electionId, rtId: body.rtId ? +body.rtId : undefined, kelurahanId: body.kelurahanId ? +body.kelurahanId : undefined, kecamatanId: body.kecamatanId ? +body.kecamatanId : undefined, alamat: body.alamat, jumlahDpt: +body.jumlahDpt ?? 0 },
+      data: { kodeTps: body.kodeTps, electionId: Number(body.electionId), rtId: body.rtId ? Number(body.rtId) : undefined, kelurahanId: body.kelurahanId ? Number(body.kelurahanId) : undefined, kecamatanId: body.kecamatanId ? Number(body.kecamatanId) : undefined, alamat: body.alamat, jumlahDpt: Number(body.jumlahDpt) || 0 },
     });
     return reply.code(201).send(tps);
   });
@@ -44,15 +44,15 @@ export async function tpsRoutes(app: FastifyInstance) {
     const tps = await prisma.tps.findUnique({ where: { id: +body.tpsId } });
     if (!tps) return reply.code(404).send({ error: 'TPS tidak ditemukan' });
 
-    const totalSuara = (+body.suaraSah ?? 0) + (+body.suaraTidakSah ?? 0);
+    const totalSuara = (Number(body.suaraSah) || 0) + (Number(body.suaraTidakSah) || 0);
     if (totalSuara > tps.jumlahDpt && tps.jumlahDpt > 0) {
       return reply.code(400).send({ error: `Total suara (${totalSuara}) melebihi DPT (${tps.jumlahDpt}). Harap periksa kembali.` });
     }
 
     const result = await prisma.tpsResult.upsert({
-      where: { tpsId_electionId: { tpsId: +body.tpsId, electionId: +body.electionId } },
-      update: { jumlahPengguna: +body.jumlahPengguna ?? 0, suaraSah: +body.suaraSah ?? 0, suaraTidakSah: +body.suaraTidakSah ?? 0, hasilSuara: body.hasilSuara ?? {}, buktiFotoUrl: body.buktiFotoUrl, status: 'submitted', inputBy: user.sub },
-      create: { tpsId: +body.tpsId, electionId: +body.electionId, jumlahPengguna: +body.jumlahPengguna ?? 0, suaraSah: +body.suaraSah ?? 0, suaraTidakSah: +body.suaraTidakSah ?? 0, hasilSuara: body.hasilSuara ?? {}, buktiFotoUrl: body.buktiFotoUrl, status: 'submitted', inputBy: user.sub },
+      where: { tpsId_electionId: { tpsId: Number(body.tpsId), electionId: Number(body.electionId) } },
+      update: { jumlahPengguna: Number(body.jumlahPengguna) || 0, suaraSah: Number(body.suaraSah) || 0, suaraTidakSah: Number(body.suaraTidakSah) || 0, hasilSuara: body.hasilSuara ?? {}, buktiFotoUrl: body.buktiFotoUrl, status: 'submitted', inputBy: user.sub },
+      create: { tpsId: Number(body.tpsId), electionId: Number(body.electionId), jumlahPengguna: Number(body.jumlahPengguna) || 0, suaraSah: Number(body.suaraSah) || 0, suaraTidakSah: Number(body.suaraTidakSah) || 0, hasilSuara: body.hasilSuara ?? {}, buktiFotoUrl: body.buktiFotoUrl, status: 'submitted', inputBy: user.sub },
     });
     return reply.code(201).send(result);
   });
