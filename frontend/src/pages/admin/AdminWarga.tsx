@@ -1,0 +1,1 @@
+export { AdminWarga } from './AdminPages';

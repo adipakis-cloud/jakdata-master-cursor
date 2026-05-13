@@ -1,0 +1,1 @@
+export { AdminLaporan } from './AdminPages';
