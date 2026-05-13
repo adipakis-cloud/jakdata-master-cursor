@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getLaporanScopeWhere, getRtScopeWhere } from '../security/security';
 
 export async function aiRoutes(app: FastifyInstance) {
   app.post('/task', { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -32,11 +33,14 @@ export async function aiRoutes(app: FastifyInstance) {
     prisma.aiReport.findMany({ orderBy: { createdAt: 'desc' }, take: 10 })
   );
 
-  app.get('/recommendations', { preHandler: [app.authenticate] }, async () => {
+  app.get('/recommendations', { preHandler: [app.authenticate] }, async (req) => {
+    const user = req.user as any;
+    const rtWhere = getRtScopeWhere(user);
+    const laporanWhere = getLaporanScopeWhere(user);
     const [rtKurang, laporanCritical] = await Promise.all([
-      prisma.rT.findMany({ include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: true } } } })
-        .then(rts => rts.filter(r => r._count.warga < 10).slice(0, 5)),
-      prisma.laporanWarga.findMany({ where: { urgencyLevel: 'critical', status: { not: 'selesai' } }, take: 5 }),
+      prisma.rT.findMany({ where: rtWhere, include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: true } } } })
+        .then(rts => rts.filter(r => r._count.warga < r.targetWarga).slice(0, 5)),
+      prisma.laporanWarga.findMany({ where: { ...laporanWhere, urgencyLevel: 'critical', status: { not: 'selesai' } }, take: 5 }),
     ]);
     return {
       wilayah: rtKurang.map(r => ({ tipe: 'data_lemah', pesan: `RT ${r.nomor} RW ${r.rw.nomor} ${r.rw.kelurahan.nama} baru ${r._count.warga} warga (target: 10)`, prioritas: 'high' })),

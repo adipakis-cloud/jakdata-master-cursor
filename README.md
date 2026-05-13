@@ -1,10 +1,12 @@
 # JAKDATA — Sistem Data Wilayah Jakarta
 
-**Stack:** React + Tailwind · Fastify TypeScript · PostgreSQL · Prisma · Docker
+**Stack:** React + Tailwind · Fastify TypeScript · PostgreSQL · Prisma · Docker optional
 
 ---
 
 ## 🚀 Cara Menjalankan
+
+Runtime lokal langsung didukung dan menjadi jalur development utama. Docker tetap tersedia untuk integrasi, tetapi source of truth database ada di `backend/prisma/schema.prisma`.
 
 ### Prasyarat
 - Docker Desktop terinstall dan berjalan
@@ -68,7 +70,7 @@ Pertama kali build membutuhkan ±3-5 menit.
 ```bash
 # Backend
 cd backend
-cp .env.example .env  # isi DATABASE_URL
+cp ../.env.example .env  # isi DATABASE_URL
 npm install
 npx prisma generate
 npx prisma db push
@@ -103,9 +105,13 @@ jakdata/
 ├── docker-compose.yml
 ├── .env.example
 ├── prisma/
-│   ├── schema.prisma          # Database schema (25+ model)
-│   └── seed.ts                # Data awal
+│   └── README.md              # Pointer ke Prisma aktif
 ├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma      # Single source of truth database schema
+│   │   ├── seed.ts            # Data awal development
+│   │   ├── seed.dev.ts
+│   │   └── seed.jakarta.ts    # Struktur wilayah produksi
 │   └── src/
 │       ├── main.ts            # Fastify server
 │       ├── config/prisma.ts

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getResidentScopeWhere, getRtScopeWhere } from '../security/security';
 
 export async function bantuanRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: [app.authenticate] }, async () =>
@@ -25,14 +26,20 @@ export async function bantuanRoutes(app: FastifyInstance) {
 
   app.get('/penerima', { preHandler: [app.authenticate] }, async (req: any) => {
     const bantuanId = req.query.bantuanId;
+    const scopeWhere = getResidentScopeWhere(req.user);
     return prisma.bantuanPenerima.findMany({
-      where: bantuanId ? { bantuanId: Number(bantuanId) } : {},
+      where: { ...(bantuanId ? { bantuanId: Number(bantuanId) } : {}), ...(Object.keys(scopeWhere).length ? { rt: (scopeWhere as any).rt ?? { id: (scopeWhere as any).rtId } } : {}) },
       include: { bantuan: true, keluarga: true },
     });
   });
 
   app.post('/penerima', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const b = req.body;
+    const rtScope = getRtScopeWhere(req.user);
+    if (b.rtId && Object.keys(rtScope).length > 0) {
+      const allowed = await prisma.rT.count({ where: { ...rtScope, id: Number(b.rtId) } });
+      if (!allowed) return reply.code(403).send({ error: 'Tidak bisa mendistribusikan bantuan di luar wilayah Anda' });
+    }
     const p = await prisma.bantuanPenerima.create({
       data: {
         bantuanId: Number(b.bantuanId),

@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getRtScopeWhere } from '../security/security';
 
 export async function wilayahRoutes(app: FastifyInstance) {
   app.get('/kota', async () => prisma.kota.findMany({ include: { provinsi: true } }));
@@ -27,17 +28,19 @@ export async function wilayahRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get('/rt-readiness', { preHandler: [app.authenticate] }, async () => {
+  app.get('/rt-readiness', { preHandler: [app.authenticate] }, async (req) => {
+    const user = req.user as any;
     const rts = await prisma.rT.findMany({
+      where: getRtScopeWhere(user),
       include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: { include: { kecamatan: true } } } } },
       orderBy: { id: 'asc' },
     });
     return rts.map(r => ({
       id: r.id, nomor: r.nomor, rw: r.rw.nomor,
       kelurahan: r.rw.kelurahan.nama, kecamatan: r.rw.kelurahan.kecamatan.nama,
-      jumlahWarga: r._count.warga, targetMinimal: 10,
-      persen: Math.min(100, Math.round((r._count.warga / 10) * 100)),
-      sudahLengkap: r._count.warga >= 10,
+      jumlahWarga: r._count.warga, targetMinimal: r.targetWarga,
+      persen: Math.min(100, Math.round((r._count.warga / r.targetWarga) * 100)),
+      sudahLengkap: r._count.warga >= r.targetWarga,
     }));
   });
 }

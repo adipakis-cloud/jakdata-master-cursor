@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getLaporanScopeWhere, getRtScopeWhere } from '../security/security';
 import path from 'path';
 import fs from 'fs';
 
@@ -7,8 +8,7 @@ export async function laporanRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: [app.authenticate] }, async (req) => {
     const user = req.user as any;
     const { status, urgency, kategori, page = 1, limit = 20 } = req.query as any;
-    let where: any = {};
-    if (user.role !== 'admin_pusat' && user.rtId) where.rtId = user.rtId;
+    let where: any = { ...getLaporanScopeWhere(user) };
     if (status) where.status = status;
     if (urgency) where.urgencyLevel = urgency;
     if (kategori) where.kategori = kategori;
@@ -27,6 +27,16 @@ export async function laporanRoutes(app: FastifyInstance) {
 
     const count = await prisma.laporanWarga.count();
     const kode = `JAK-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+    const targetRtId = body.rtId ? +body.rtId : (user.rtId ?? null);
+    let targetRt: any = null;
+    if (targetRtId) {
+      const rtScope = getRtScopeWhere(user);
+      targetRt = await prisma.rT.findFirst({
+        where: Object.keys(rtScope).length > 0 ? { ...rtScope, id: targetRtId } : { id: targetRtId },
+        include: { rw: { include: { kelurahan: true } } },
+      });
+      if (!targetRt) return reply.code(403).send({ error: 'RT laporan berada di luar wilayah Anda' });
+    }
 
     const laporan = await prisma.laporanWarga.create({
       data: {
@@ -34,7 +44,9 @@ export async function laporanRoutes(app: FastifyInstance) {
         namaPelapor: body.namaPelapor ?? user.nama, noHpPelapor: body.noHpPelapor,
         isiLaporan: body.isiLaporan, kategori: body.kategori, subkategori: body.subkategori,
         urgencyLevel: body.urgencyLevel ?? 'medium', lokasiText: body.lokasiText,
-        rtId: body.rtId ? +body.rtId : (user.rtId ?? null),
+        rtId: targetRtId,
+        kelurahanId: body.kelurahanId ? +body.kelurahanId : (targetRt?.rw?.kelurahanId ?? user.kelurahanId ?? null),
+        kecamatanId: body.kecamatanId ? +body.kecamatanId : (targetRt?.rw?.kelurahan?.kecamatanId ?? user.kecamatanId ?? null),
         isEmergency: body.urgencyLevel === 'critical', lampiranUrls: body.lampiranUrls ?? [],
         createdBy: user.sub,
       },
@@ -45,21 +57,28 @@ export async function laporanRoutes(app: FastifyInstance) {
   });
 
   app.get('/:id', { preHandler: [app.authenticate] }, async (req) => {
+    const user = req.user as any;
     const { id } = req.params as any;
-    return prisma.laporanWarga.findUnique({ where: { id: +id }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
+    return prisma.laporanWarga.findFirst({ where: { id: +id, ...getLaporanScopeWhere(user) }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
   });
 
   app.patch('/:id/status', { preHandler: [app.authenticate] }, async (req) => {
+    const user = req.user as any;
     const { id } = req.params as any;
     const { status, catatan } = req.body as any;
+    const existing = await prisma.laporanWarga.findFirst({ where: { id: +id, ...getLaporanScopeWhere(user) }, select: { id: true } });
+    if (!existing) return { error: 'Laporan tidak ditemukan atau di luar wilayah Anda' };
     const laporan = await prisma.laporanWarga.update({ where: { id: +id }, data: { status, resolvedAt: status === 'selesai' ? new Date() : undefined } });
     if (catatan) await prisma.laporanMessage.create({ data: { laporanId: +id, senderType: 'admin', messageText: catatan, isInternal: true } });
     return laporan;
   });
 
   app.post('/:id/pesan', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const user = req.user as any;
     const { id } = req.params as any;
     const { messageText, isInternal } = req.body as any;
+    const existing = await prisma.laporanWarga.findFirst({ where: { id: +id, ...getLaporanScopeWhere(user) }, select: { id: true } });
+    if (!existing) return reply.code(404).send({ error: 'Laporan tidak ditemukan atau di luar wilayah Anda' });
     const msg = await prisma.laporanMessage.create({ data: { laporanId: +id, senderType: 'admin', messageText, isInternal: isInternal ?? false } });
     return reply.code(201).send(msg);
   });

@@ -15,6 +15,7 @@ import { warmindoRoutes } from './modules/warmindo/warmindo.routes';
 import { bantuanRoutes } from './modules/bantuan/bantuan.routes';
 import { aiRoutes } from './modules/ai/ai.routes';
 import { tpsRoutes, officialRoutes, usersRoutes } from './modules/tps/tps.routes';
+import { koordinatorRoutes } from './modules/koordinator/koordinator.routes';
 import { securityPlugin } from './modules/security/security';
 
 declare module 'fastify' {
@@ -51,7 +52,6 @@ async function bootstrap() {
   await app.register(officialRoutes,  { prefix: '/api/official' });
   await app.register(usersRoutes,     { prefix: '/api/users' });
 
-const { koordinatorRoutes } = require('./modules/koordinator/koordinator.routes');
   await app.register(koordinatorRoutes, { prefix: '/api/koordinator' });
 
   app.get('/health', async () => ({ status:'ok', version:'3.0', time: new Date().toISOString(), ai: !!process.env.ANTHROPIC_API_KEY }));

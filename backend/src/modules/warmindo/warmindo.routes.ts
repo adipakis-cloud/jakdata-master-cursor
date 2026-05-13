@@ -1,15 +1,24 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getWarmindoScopeWhere } from '../security/security';
 
 export async function warmindoRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: [app.authenticate] }, async () =>
+  async function assertWarmindoAccess(user: any, id: number) {
+    const scope = getWarmindoScopeWhere(user);
+    if (Object.keys(scope).length === 0) return true;
+    return (await prisma.warmindoOutlet.count({ where: { ...scope, id } })) > 0;
+  }
+
+  app.get('/', { preHandler: [app.authenticate] }, async (req: any) =>
     prisma.warmindoOutlet.findMany({
+      where: getWarmindoScopeWhere(req.user),
       include: { inventory: true, _count: { select: { transaksi: true } } },
     })
   );
 
-  app.get('/:id', { preHandler: [app.authenticate] }, async (req: any) => {
+  app.get('/:id', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    if (!(await assertWarmindoAccess(req.user, id))) return reply.code(404).send({ error: 'Warmindo tidak ditemukan atau di luar wilayah Anda' });
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -59,6 +68,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.post('/:id/transaksi', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    if (!(await assertWarmindoAccess(req.user, id))) return reply.code(404).send({ error: 'Warmindo tidak ditemukan atau di luar wilayah Anda' });
     const b = req.body;
     const omzet = Number(b.totalOmzet) || 0;
     const hpp = Number(b.totalHpp) || 0;
@@ -78,6 +88,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.post('/:id/pengeluaran', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    if (!(await assertWarmindoAccess(req.user, id))) return reply.code(404).send({ error: 'Warmindo tidak ditemukan atau di luar wilayah Anda' });
     const b = req.body;
     const p = await prisma.warmindoPengeluaran.create({
       data: {
@@ -92,6 +103,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.post('/:id/inventory', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    if (!(await assertWarmindoAccess(req.user, id))) return reply.code(404).send({ error: 'Warmindo tidak ditemukan atau di luar wilayah Anda' });
     const b = req.body;
     const inv = await prisma.warmindoInventory.create({
       data: {
@@ -108,6 +120,8 @@ export async function warmindoRoutes(app: FastifyInstance) {
   });
 
   app.put('/:id/inventory/:invId', { preHandler: [app.authenticate] }, async (req: any) => {
+    const id = Number(req.params.id);
+    if (!(await assertWarmindoAccess(req.user, id))) return { error: 'Warmindo tidak ditemukan atau di luar wilayah Anda' };
     const invId = Number(req.params.invId);
     const b = req.body;
     return prisma.warmindoInventory.update({
@@ -118,6 +132,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.get('/:id/keuangan', { preHandler: [app.authenticate] }, async (req: any) => {
     const id = Number(req.params.id);
+    if (!(await assertWarmindoAccess(req.user, id))) return { error: 'Warmindo tidak ditemukan atau di luar wilayah Anda' };
     const now = new Date();
     const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
