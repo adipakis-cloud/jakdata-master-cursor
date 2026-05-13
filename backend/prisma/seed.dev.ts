@@ -68,7 +68,7 @@ async function main() {
 
   // Keluarga
   for (let i=0; i<5; i++) {
-    await prisma.keluarga.create({data:{rtId:rtSample[i],namaKepala:namaCon[i],noHpKepala:`0813${String(i).padStart(8,'0')}`,jumlahAnggota:3+i,jumlahTanggungan:1+i,statusEkonomi:stList[i%stList.length],totalPenghasilan:[0,800000,1500000,3000000,5000000][i],skorPrioritasBantuan:[95,80,55,30,15][i],kategoriBAntuan:['sangat_prioritas','prioritas','normal','normal','tidak_prioritas'][i]}}).catch(()=>{});
+    await prisma.keluarga.create({data:{rtId:rtSample[i],namaKepala:namaCon[i],noHpKepala:`0813${String(i).padStart(8,'0')}`,jumlahAnggota:3+i,jumlahTanggungan:1+i,statusEkonomi:stList[i%stList.length],totalPenghasilan:[0,800000,1500000,3000000,5000000][i],skorPrioritasBantuan:[95,80,55,30,15][i],kategoriBantuan:['sangat_prioritas','prioritas','normal','normal','tidak_prioritas'][i]}}).catch(()=>{});
   }
   console.log('✅ Keluarga/KK');
 

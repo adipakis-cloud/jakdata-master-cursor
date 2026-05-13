@@ -1,137 +1,475 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, StatusEkonomi } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+
 const prisma = new PrismaClient();
-const pad = (n: number, l=3) => String(n).padStart(l,'0');
 
-const JAKARTA: Record<string,{kode:string,tipe?:string,kecamatan:Record<string,string[]>}> = {
-  'Jakarta Pusat':{kode:'JAKPUS',kecamatan:{'Gambir':['Gambir','Cideng','Petojo Selatan','Petojo Utara','Kebon Kelapa','Duri Pulo'],'Sawah Besar':['Pasar Baru','Kartini','Gunung Sahari Utara','Mangga Dua Selatan','Karang Anyar'],'Kemayoran':['Kemayoran','Kebon Kosong','Harapan Mulia','Cempaka Baru','Sumur Batu','Utan Panjang','Serdang','Rawasari'],'Senen':['Senen','Kramat','Kwitang','Kenari','Paseban','Bungur'],'Cempaka Putih':['Cempaka Putih Timur','Cempaka Putih Barat','Rawasari'],'Menteng':['Menteng','Pegangsaan','Cikini','Gondangdia','Kebon Sirih'],'Tanah Abang':['Tanah Abang','Kampung Bali','Karet','Karet Tengsin','Petamburan','Kebon Kacang','Kebon Melati','Gelora'],'Johar Baru':['Johar Baru','Kampung Rawa','Galur','Tanah Tinggi']}},
-  'Jakarta Utara':{kode:'JAKUT',kecamatan:{'Penjaringan':['Penjaringan','Pluit','Kamal Muara','Kapuk Muara','Pejagalan'],'Pademangan':['Pademangan Barat','Pademangan Timur','Ancol'],'Tanjung Priok':['Tanjung Priok','Sunter Jaya','Sunter Agung','Papanggo','Sungai Bambu','Kebon Bawang'],'Koja':['Koja','Lagoa','Rawa Badak Selatan','Rawa Badak Utara','Tugu Selatan','Tugu Utara'],'Cilincing':['Cilincing','Semper Barat','Semper Timur','Rorotan','Marunda','Kalibaru','Sukapura'],'Kelapa Gading':['Kelapa Gading Barat','Kelapa Gading Timur','Pegangsaan Dua']}},
-  'Jakarta Barat':{kode:'JAKBAR',kecamatan:{'Cengkareng':['Cengkareng Barat','Cengkareng Timur','Duri Kosambi','Kapuk','Kedaung Kali Angke','Rawa Buaya'],'Grogol Petamburan':['Grogol','Jelambar','Jelambar Baru','Tanjung Duren Selatan','Tanjung Duren Utara','Tomang','Wijaya Kusuma'],'Tambora':['Angke','Duri Selatan','Duri Utara','Jembatan Besi','Jembatan Lima','Kali Anyar','Krendang','Pekojan','Roa Malaka','Tambora','Tanah Sereal'],'Taman Sari':['Taman Sari','Glodok','Krukut','Mangga Besar','Maphar','Pinangsia','Tangki'],'Kebon Jeruk':['Duri Kepa','Kebon Jeruk','Kelapa Dua','Kedoya Selatan','Kedoya Utara','Sukabumi Selatan','Sukabumi Utara'],'Palmerah':['Palmerah','Slipi','Kota Bambu Utara','Kota Bambu Selatan','Jati Pulo','Kemanggisan'],'Kalideres':['Kalideres','Pegadungan','Semanan','Tegal Alur','Kamal'],'Kembangan':['Kembangan Utara','Kembangan Selatan','Joglo','Srengseng','Meruya Selatan','Meruya Utara']}},
-  'Jakarta Selatan':{kode:'JAKSEL',kecamatan:{'Tebet':['Tebet Barat','Tebet Timur','Kebon Baru','Bukit Duri','Menteng Dalam','Manggarai','Manggarai Selatan'],'Setiabudi':['Setiabudi','Kuningan Timur','Karet','Karet Semanggi','Karet Kuningan','Guntur','Pasar Manggis','Menteng Atas'],'Mampang Prapatan':['Mampang Prapatan','Bangka','Pela Mampang','Tegal Parang','Kuningan Barat'],'Pasar Minggu':['Pasar Minggu','Kebagusan','Pejaten Barat','Pejaten Timur','Jati Padang','Cilandak Timur','Ragunan'],'Jagakarsa':['Jagakarsa','Srengseng Sawah','Ciganjur','Lenteng Agung','Tanjung Barat','Cipedak'],'Pesanggrahan':['Pesanggrahan','Bintaro','Ulujami','Petukangan Selatan','Petukangan Utara'],'Cilandak':['Cilandak Barat','Lebak Bulus','Gandaria Selatan','Cipete Selatan','Pondok Labu'],'Kebayoran Baru':['Senayan','Selong','Rawa Barat','Gandaria Utara','Cipete Utara','Pulo','Gunung','Kramat Pela','Petogogan','Melawai'],'Kebayoran Lama':['Kebayoran Lama Utara','Kebayoran Lama Selatan','Grogol Selatan','Grogol Utara','Cipulir','Pondok Pinang'],'Pancoran':['Pancoran','Kalibata','Rawajati','Duren Tiga','Pengadegan','Cikoko']}},
-  'Jakarta Timur':{kode:'JAKTIM',kecamatan:{'Matraman':['Matraman','Palmeriam','Utan Kayu Selatan','Utan Kayu Utara','Pisangan Baru','Kebon Manggis'],'Pulogadung':['Pulogadung','Jatinegara Kaum','Pisangan Timur','Cipinang Cempedak','Cipinang Muara','Rawamangun','Kayu Putih'],'Jatinegara':['Kampung Melayu','Bidara Cina','Cipinang Besar Selatan','Cipinang Besar Utara','Cipinang','Rawa Bunga','Balimester'],'Kramat Jati':['Kramat Jati','Cililitan','Cawang','Dukuh','Batu Ampar','Balekambang','Tengah'],'Ciracas':['Ciracas','Susukan','Kelapa Dua Wetan','Cibubur','Rambutan'],'Cipayung':['Cipayung','Munjul','Pondok Rangon','Cilangkap','Setu','Bambu Apus','Lubang Buaya','Ceger'],'Cakung':['Cakung Timur','Cakung Barat','Pulo Gebang','Ujung Menteng','Penggilingan','Rawa Terate'],'Duren Sawit':['Duren Sawit','Pondok Bambu','Klender','Pondok Kelapa','Malaka Sari','Malaka Jaya','Pondok Kopi'],'Makasar':['Makasar','Cipinang Melayu','Halim Perdana Kusuma','Kebon Pala','Pinang Ranti'],'Pasar Rebo':['Pasar Rebo','Cijantung','Kalisari','Baru','Gedong']}},
-  'Kepulauan Seribu':{kode:'KEPSER',tipe:'kabupaten',kecamatan:{'Kepulauan Seribu Utara':['Pulau Harapan','Pulau Kelapa','Pulau Panggang'],'Kepulauan Seribu Selatan':['Pulau Pari','Pulau Tidung','Pulau Untung Jawa']}},
-};
+const hashPassword = (password: string) => bcrypt.hash(password, 10);
+const pad = (value: number, length = 3) => String(value).padStart(length, '0');
 
-async function main() {
-  console.log('🌱 Seeding JAKDATA — Jakarta Lengkap...');
+async function seedWilayah() {
+  const provinsi = await prisma.provinsi.upsert({
+    where: { kode: 'DKI' },
+    update: {},
+    create: { nama: 'DKI Jakarta', kode: 'DKI' },
+  });
 
-  const dki = await prisma.provinsi.upsert({where:{kode:'DKI'},update:{},create:{nama:'DKI Jakarta',kode:'DKI'}});
+  const kota = await prisma.kota.upsert({
+    where: { kode: 'JAKBAR' },
+    update: { nama: 'Jakarta Barat', tipe: 'kota' },
+    create: { provinsiId: provinsi.id, nama: 'Jakarta Barat', kode: 'JAKBAR', tipe: 'kota' },
+  });
 
-  let ktCount=0, kecCount=0, kelCount=0, rwCount=0, rtCount=0;
-  const rtSample: number[] = [];
-  const kelMap: Record<string,number> = {};
+  const kecamatan = await prisma.kecamatan.upsert({
+    where: { kotaId_nama: { kotaId: kota.id, nama: 'Cengkareng' } },
+    update: { kode: 'CGK' },
+    create: { kotaId: kota.id, nama: 'Cengkareng', kode: 'CGK' },
+  });
 
-  for (const [namaKota, d] of Object.entries(JAKARTA)) {
-    const kota = await prisma.kota.upsert({where:{kode:d.kode},update:{},create:{provinsiId:dki.id,nama:namaKota,kode:d.kode,tipe:d.tipe??'kota'}});
-    ktCount++;
-    for (const [namaKec, kelList] of Object.entries(d.kecamatan)) {
-      const kec = await prisma.kecamatan.upsert({where:{kotaId_nama:{kotaId:kota.id,nama:namaKec}},update:{},create:{kotaId:kota.id,nama:namaKec}});
-      kecCount++;
-      for (const namaKel of kelList) {
-        const kel = await prisma.kelurahan.upsert({where:{kecamatanId_nama:{kecamatanId:kec.id,nama:namaKel}},update:{},create:{kecamatanId:kec.id,nama:namaKel}});
-        kelMap[`${namaKec}::${namaKel}`] = kel.id;
-        kelCount++;
-        for (let rn=1; rn<=5; rn++) {
-          const rw = await prisma.rW.upsert({where:{kelurahanId_nomor:{kelurahanId:kel.id,nomor:pad(rn)}},update:{},create:{kelurahanId:kel.id,nomor:pad(rn)}});
-          rwCount++;
-          for (let tn=1; tn<=5; tn++) {
-            const rt = await prisma.rT.upsert({where:{rwId_nomor:{rwId:rw.id,nomor:pad(tn)}},update:{},create:{rwId:rw.id,nomor:pad(tn),targetWarga:10}});
-            rtCount++;
-            if (rtSample.length < 15) rtSample.push(rt.id);
-          }
-        }
-      }
-    }
-  }
-  console.log(`✅ ${ktCount} kota | ${kecCount} kecamatan | ${kelCount} kelurahan | ${rwCount} RW | ${rtCount} RT`);
+  const kelurahan = await prisma.kelurahan.upsert({
+    where: { kecamatanId_nama: { kecamatanId: kecamatan.id, nama: 'Kapuk' } },
+    update: { kode: 'KPK', kodePos: '11720' },
+    create: { kecamatanId: kecamatan.id, nama: 'Kapuk', kode: 'KPK', kodePos: '11720' },
+  });
 
-  // Users
-  const h = (p:string) => bcrypt.hash(p, 10);
-  const admin = await prisma.user.upsert({where:{email:'admin@jakdata.id'},update:{},create:{nama:'Administrator JAKDATA',email:'admin@jakdata.id',passwordHash:await h('admin123'),role:'admin_pusat'}});
-  await prisma.user.upsert({where:{email:'petugas.rt001@jakdata.id'},update:{},create:{nama:'Petugas RT 001',email:'petugas.rt001@jakdata.id',passwordHash:await h('petugas123'),role:'petugas_lapangan',rtId:rtSample[0]}});
-  await prisma.user.upsert({where:{email:'kordin.rw001@jakdata.id'},update:{},create:{nama:'Koordinator RW 001',email:'kordin.rw001@jakdata.id',passwordHash:await h('petugas123'),role:'koordinator_rw',rtId:rtSample[0]}});
-  console.log('✅ Users');
+  const rw = await prisma.rW.upsert({
+    where: { kelurahanId_nomor: { kelurahanId: kelurahan.id, nomor: '001' } },
+    update: { namaKetua: 'Bapak Ahmad Ketua RW', noHpKetua: '081200000001' },
+    create: {
+      kelurahanId: kelurahan.id,
+      nomor: '001',
+      namaKetua: 'Bapak Ahmad Ketua RW',
+      noHpKetua: '081200000001',
+    },
+  });
 
-  // Warga
-  const namaCon=['Ahmad Fauzi','Siti Rahayu','Budi Santoso','Dewi Lestari','Hendra G','Rina Wulandari','Joko Susilo','Nur Hasanah','Agus P','Wahyu S','Bambang H','Fitri H','Rudi H','Yanti P','Doni S'];
-  const katList=['warga_biasa','warga_biasa','penerima_bantuan','warga_biasa','pekerja_warmindo'];
-  const stList=['sedang','rentan','miskin','sangat_miskin','mampu'] as const;
-  let wCount=0;
-  for (let i=0; i<Math.min(rtSample.length,10); i++) {
-    const jml = i<5 ? 10+Math.floor(Math.random()*5) : Math.floor(Math.random()*8);
-    for (let j=0; j<jml; j++) {
-      await prisma.warga.create({data:{rtId:rtSample[i],nama:`${namaCon[j%namaCon.length]} ${i+1}`,noHp:`0812${String(i*100+j).padStart(8,'0')}`,jenisKelamin:j%2===0?'L':'P',kategori:katList[j%katList.length],statusEkonomi:stList[j%stList.length],pekerjaan:['Pedagang','Buruh','Ojek Online','IRT','Wiraswasta'][j%5],createdBy:admin.id}}).catch(()=>{});
-      wCount++;
-    }
-  }
-  console.log(`✅ ${wCount} warga sample`);
+  const rt = await Promise.all(
+    [1, 2].map((nomor) =>
+      prisma.rT.upsert({
+        where: { rwId_nomor: { rwId: rw.id, nomor: pad(nomor) } },
+        update: { targetWarga: 10 },
+        create: {
+          rwId: rw.id,
+          nomor: pad(nomor),
+          namaKetua: nomor === 1 ? 'Ibu Siti Ketua RT' : 'Pak Budi Ketua RT',
+          noHpKetua: `08120000000${nomor}`,
+          targetWarga: 10,
+        },
+      }),
+    ),
+  );
 
-  // Keluarga
-  for (let i=0; i<5; i++) {
-    await prisma.keluarga.create({data:{rtId:rtSample[i],namaKepala:namaCon[i],noHpKepala:`0813${String(i).padStart(8,'0')}`,jumlahAnggota:3+i,jumlahTanggungan:1+i,statusEkonomi:stList[i%stList.length],totalPenghasilan:[0,800000,1500000,3000000,5000000][i],skorPrioritasBantuan:[95,80,55,30,15][i],kategoriBAntuan:['sangat_prioritas','prioritas','normal','normal','tidak_prioritas'][i]}}).catch(()=>{});
-  }
-  console.log('✅ Keluarga/KK');
-
-  // Laporan
-  const lap=[
-    {kode:'JAK-2026-00001',ch:'whatsapp',nama:'Ibu Sari',hp:'081234567890',isi:'Rumah kebanjiran, anak-anak belum makan.',kat:'bencana',sub:'banjir',urg:'critical' as const,em:true,sum:'Banjir + keluarga tanpa makan.',rek:'Kirim evakuasi dan makanan darurat.'},
-    {kode:'JAK-2026-00002',ch:'web',nama:'Pak Hendra',hp:'081298765432',isi:'Anak 12 tahun putus sekolah karena biaya.',kat:'pendidikan',sub:'anak_putus_sekolah',urg:'high' as const,em:false,sum:'Anak putus sekolah karena ekonomi.',rek:'Koordinasi Dinas Pendidikan.'},
-    {kode:'JAK-2026-00003',ch:'whatsapp',nama:'Bu Wati',hp:'081387654321',isi:'Ibu lansia 78 tahun 2 hari tidak makan.',kat:'sosial',sub:'lansia_terlantar',urg:'high' as const,em:false,sum:'Lansia 78 tahun tanpa makanan.',rek:'Kunjungi segera.'},
-    {kode:'JAK-2026-00004',ch:'web',nama:'Pak Doni',hp:'081376543210',isi:'Anak jalanan 8-10 tahun tidak sekolah.',kat:'sosial',sub:'anak_jalanan',urg:'medium' as const,em:false,sum:'Anak jalanan tanpa tempat tinggal.',rek:'Koordinasi Dinas Sosial.'},
-    {kode:'JAK-2026-00005',ch:'koordinator',nama:'Koordinator RT',hp:'081222220002',isi:'Warga kehilangan pekerjaan 3 bulan, 4 anak.',kat:'ekonomi',sub:'kehilangan_pekerjaan',urg:'medium' as const,em:false,sum:'Kepala keluarga 3 bulan menganggur.',rek:'Program pelatihan kerja.'},
-    {kode:'JAK-2026-00006',ch:'whatsapp',nama:'Bu Nurul',hp:'081365432109',isi:'Bantuan sembako belum terima padahal terdaftar.',kat:'bantuan',sub:'bantuan_belum_terima',urg:'medium' as const,em:false,sum:'Warga terdaftar belum terima bantuan.',rek:'Distribusi susulan.'},
-    {kode:'JAK-2026-00007',ch:'web',nama:'Pak Sugeng',hp:'081354321098',isi:'Ibu hamil 8 bulan lemah, tidak ada biaya dokter.',kat:'kesehatan',sub:'ibu_hamil_berisiko',urg:'high' as const,em:false,sum:'Ibu hamil lemah tanpa biaya.',rek:'Rujuk puskesmas, daftarkan JKN.'},
-    {kode:'JAK-2026-00008',ch:'web',nama:'Pak Rahmat',hp:'081312345678',isi:'Atap rumah rubuh kena angin kencang.',kat:'bencana',sub:'rumah_rusak',urg:'high' as const,em:false,sum:'Atap rubuh akibat angin.',rek:'Koordinasi BPBD.'},
-  ];
-  for (const l of lap) {
-    await prisma.laporanWarga.upsert({where:{kodeLaporan:l.kode},update:{},create:{kodeLaporan:l.kode,channelType:l.ch,namaPelapor:l.nama,noHpPelapor:l.hp,isiLaporan:l.isi,kategori:l.kat,subkategori:l.sub,urgencyLevel:l.urg,isEmergency:l.em,rtId:rtSample[0],aiSummary:l.sum,aiRecommendation:l.rek,createdBy:admin.id}});
-  }
-  console.log(`✅ ${lap.length} laporan warga`);
-
-  // Bantuan
-  const sem = await prisma.bantuan.create({data:{nama:'Sembako Paket A',tipe:'sembako',deskripsi:'Beras 5kg, minyak 1L, gula 1kg, mie 5 bungkus',satuan:'paket',nilaiPerSatuan:150000,stokTotal:200,stokTersisa:127,sumber:'JAKDATA Program',tanggalMasuk:new Date()}}).catch(()=>null);
-  await prisma.bantuan.create({data:{nama:'Bantuan Tunai Darurat',tipe:'uang_tunai',deskripsi:'Tunai untuk keluarga terdampak',satuan:'orang',nilaiPerSatuan:500000,stokTotal:50,stokTersisa:38,sumber:'Dana Sosial',tanggalMasuk:new Date()}}).catch(()=>null);
-  await prisma.bantuan.create({data:{nama:'Perlengkapan Sekolah',tipe:'sembako',deskripsi:'Seragam, tas, alat tulis',satuan:'paket',nilaiPerSatuan:350000,stokTotal:30,stokTersisa:24,sumber:'Donasi',tanggalMasuk:new Date()}}).catch(()=>null);
-  if (sem) {
-    for (const p of [{n:'Warga Prioritas 1',s:'diterima'},{n:'Warga Prioritas 2',s:'diterima'},{n:'Warga Prioritas 3',s:'terjadwal'},{n:'Warga Prioritas 4',s:'terjadwal'}]) {
-      await prisma.bantuanPenerima.create({data:{bantuanId:sem.id,namaPenerima:p.n,rtId:rtSample[0],jumlahDiterima:1,status:p.s as any,tanggalDiterima:p.s==='diterima'?new Date():undefined}}).catch(()=>{});
-    }
-  }
-  console.log('✅ Bantuan dan penerima');
-
-  // Warmindo
-  const kapukId = kelMap['Cengkareng::Kapuk'] ?? Object.values(kelMap)[3];
-  const w1 = await prisma.warmindoOutlet.upsert({where:{kodeOutlet:'WRM-001'},update:{},create:{kodeOutlet:'WRM-001',namaOutlet:'Warmindo Kapuk 1',kelurahanId:kapukId,rtId:rtSample[0],alamat:'Jl. Kapuk Raya No. 12',status:'aktif',modalAwal:20000000,targetOmzetHarian:1000000,targetLabaBulanan:3000000,biayaSewaBulanan:1500000,karyawanTotal:3,tanggalBuka:new Date(Date.now()-60*24*3600000)}});
-  const angkeId = kelMap['Tambora::Angke'] ?? Object.values(kelMap)[15];
-  await prisma.warmindoOutlet.upsert({where:{kodeOutlet:'WRM-002'},update:{},create:{kodeOutlet:'WRM-002',namaOutlet:'Warmindo Tambora 1',kelurahanId:angkeId,rtId:rtSample[5],alamat:'Jl. Angke No. 7',status:'persiapan',modalAwal:20000000,targetOmzetHarian:800000,targetLabaBulanan:2500000,biayaSewaBulanan:1200000,karyawanTotal:2}});
-
-  for (const it of [{n:'Mie Instan (Karton)',s:'karton',st:25,m:5,b:95000,j:3500},{n:'Telur Ayam',s:'kg',st:12,m:3,b:25000,j:2800},{n:'Beras',s:'kg',st:30,m:10,b:12000,j:0},{n:'Minyak Goreng',s:'liter',st:8,m:2,b:15000,j:0},{n:'Air Mineral (Dus)',s:'dus',st:6,m:5,b:18000,j:3000},{n:'Gas LPG 3kg',s:'tabung',st:4,m:2,b:20000,j:0}]) {
-    await prisma.warmindoInventory.upsert({where:{warmindoId_namaBahan:{warmindoId:w1.id,namaBahan:it.n}},update:{},create:{warmindoId:w1.id,namaBahan:it.n,satuan:it.s,stokSaatIni:it.st,stokMinimum:it.m,hargaBeli:it.b,hargaJual:it.j}});
-  }
-  const om=[875000,920000,750000,1050000,980000,1100000,890000,960000,1020000,870000,940000,1080000,920000,1010000];
-  for (let i=0; i<om.length; i++) { const t=new Date(); t.setDate(t.getDate()-i); await prisma.warmindoTransaksi.create({data:{warmindoId:w1.id,tanggal:t,totalOmzet:om[i],totalHpp:Math.round(om[i]*.65),grossProfit:Math.round(om[i]*.35),jumlahItem:Math.floor(om[i]/15000),items:[{nama:'Mie Goreng',qty:30,harga:15000}]}}); }
-  for (const p of [{k:'gaji_karyawan',d:'Gaji kasir',j:1500000},{k:'sewa_tempat',d:'Sewa tempat',j:1500000},{k:'listrik',d:'Listrik + gas',j:450000},{k:'bahan_baku',d:'Mie 10 karton',j:950000},{k:'bahan_baku',d:'Telur 20kg',j:500000}]) {
-    await prisma.warmindoPengeluaran.create({data:{warmindoId:w1.id,kategori:p.k,deskripsi:p.d,jumlah:p.j}});
-  }
-  console.log('✅ Warmindo + 14 hari transaksi');
-
-  // Official Profile
-  await prisma.publicOfficial.upsert({where:{id:1},update:{},create:{namaLengkap:'Sigit Purnomo Said',gelarBelakang:'S.A.P.',officialPhotoUrl:null,jabatan:'Anggota DPR RI',lembaga:'DPR RI',fraksi:'Fraksi Partai Amanat Nasional',partai:'Partai Amanat Nasional (PAN)',komisi:'Komisi VIII DPR RI',dapil:'DKI Jakarta II',periode:'2024–2029',fokusKomisi:['Agama','Sosial','Haji','Bantuan Sosial','Kebencanaan','Perlindungan Anak','Lansia','Penyandang Disabilitas','Kelompok Rentan','Pemberdayaan Sosial'],waAspirasi:'6281234567890',instagram:'@sigitpurnomosaid',bioSingkat:'Anggota DPR RI Fraksi PAN Dapil DKI Jakarta II, berkomitmen memperjuangkan kesejahteraan warga Jakarta.',visi:'Jakarta yang adil, sejahtera, dan berkeadilan sosial untuk seluruh warga.',misi:['Memperkuat program bantuan sosial tepat sasaran','Mendorong pemberdayaan ekonomi warga melalui UMKM dan Warmindo','Memastikan perlindungan anak, lansia, dan penyandang disabilitas','Mengawal pengelolaan dana haji yang transparan','Memperjuangkan infrastruktur sosial di Jakarta']}}).catch(()=>{});
-  console.log('✅ Profil Sigit Purnomo Said, S.A.P. — Anggota DPR RI');
-
-  const [k,kec,kel,rw,rt,w] = await prisma.$transaction([prisma.kota.count(),prisma.kecamatan.count(),prisma.kelurahan.count(),prisma.rW.count(),prisma.rT.count(),prisma.warga.count()]);
-  console.log(`\n╔════════════════════════════╗`);
-  console.log(`║   SEED JAKDATA SELESAI     ║`);
-  console.log(`╠════════════════════════════╣`);
-  console.log(`║ Kota/Kab  : ${String(k).padEnd(15)}║`);
-  console.log(`║ Kecamatan : ${String(kec).padEnd(15)}║`);
-  console.log(`║ Kelurahan : ${String(kel).padEnd(15)}║`);
-  console.log(`║ RW        : ${String(rw).padEnd(15)}║`);
-  console.log(`║ RT        : ${String(rt).padEnd(15)}║`);
-  console.log(`║ Warga     : ${String(w).padEnd(15)}║`);
-  console.log(`╠════════════════════════════╣`);
-  console.log(`║ admin@jakdata.id/admin123  ║`);
-  console.log(`╚════════════════════════════╝`);
+  return { provinsi, kota, kecamatan, kelurahan, rw, rt001: rt[0], rt002: rt[1] };
 }
 
-main().catch(console.error).finally(()=>prisma.$disconnect());
+async function seedUsers(rtId: number, kelurahanId: number) {
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@jakdata.id' },
+    update: { role: 'admin_pusat', aktif: true },
+    create: {
+      nama: 'Administrator JAKDATA',
+      email: 'admin@jakdata.id',
+      passwordHash: await hashPassword('admin123'),
+      role: 'admin_pusat',
+    },
+  });
+
+  const petugas = await prisma.user.upsert({
+    where: { email: 'petugas.rt001@jakdata.id' },
+    update: { rtId, aktif: true },
+    create: {
+      nama: 'Petugas RT 001',
+      email: 'petugas.rt001@jakdata.id',
+      passwordHash: await hashPassword('petugas123'),
+      role: 'petugas_lapangan',
+      rtId,
+    },
+  });
+
+  const manager = await prisma.user.upsert({
+    where: { email: 'manager.umkm@jakdata.id' },
+    update: { kelurahanId, aktif: true },
+    create: {
+      nama: 'Manager UMKM Kapuk',
+      email: 'manager.umkm@jakdata.id',
+      passwordHash: await hashPassword('manager123'),
+      role: 'manager_warmindo',
+      kelurahanId,
+    },
+  });
+
+  return { admin, petugas, manager };
+}
+
+async function upsertWargaByName(data: {
+  rtId: number;
+  kkId?: number;
+  nama: string;
+  noHp: string;
+  jenisKelamin: string;
+  pekerjaan: string;
+  statusEkonomi: StatusEkonomi;
+  createdBy: number;
+}) {
+  const existing = await prisma.warga.findFirst({ where: { rtId: data.rtId, nama: data.nama } });
+
+  if (existing) {
+    return prisma.warga.update({
+      where: { id: existing.id },
+      data: {
+        kkId: data.kkId,
+        noHp: data.noHp,
+        jenisKelamin: data.jenisKelamin,
+        pekerjaan: data.pekerjaan,
+        statusEkonomi: data.statusEkonomi,
+        diverifikasi: true,
+      },
+    });
+  }
+
+  return prisma.warga.create({
+    data: {
+      ...data,
+      kategori: 'warga_biasa',
+      diverifikasi: true,
+      alamat: 'Jl. Kapuk Raya, RW 001',
+    },
+  });
+}
+
+async function seedWarga(rtId: number, createdBy: number) {
+  const keluarga = await prisma.keluarga.upsert({
+    where: { noKk: '3174010101010001' },
+    update: {
+      rtId,
+      namaKepala: 'Ahmad Fauzi',
+      statusEkonomi: 'rentan',
+      kategoriBantuan: 'prioritas',
+    },
+    create: {
+      rtId,
+      namaKepala: 'Ahmad Fauzi',
+      noKk: '3174010101010001',
+      noHpKepala: '081211110001',
+      jumlahAnggota: 4,
+      jumlahTanggungan: 2,
+      statusRumah: 'kontrak',
+      statusEkonomi: 'rentan',
+      totalPenghasilan: 2500000,
+      skorPrioritasBantuan: 78,
+      kategoriBantuan: 'prioritas',
+      terdaftarProgram: ['sembako'],
+    },
+  });
+
+  const warga = await Promise.all([
+    upsertWargaByName({
+      rtId,
+      kkId: keluarga.id,
+      nama: 'Ahmad Fauzi',
+      noHp: '081211110001',
+      jenisKelamin: 'L',
+      pekerjaan: 'Pedagang nasi uduk',
+      statusEkonomi: 'rentan',
+      createdBy,
+    }),
+    upsertWargaByName({
+      rtId,
+      kkId: keluarga.id,
+      nama: 'Siti Rahayu',
+      noHp: '081211110002',
+      jenisKelamin: 'P',
+      pekerjaan: 'Penjahit rumahan',
+      statusEkonomi: 'rentan',
+      createdBy,
+    }),
+    upsertWargaByName({
+      rtId,
+      kkId: keluarga.id,
+      nama: 'Budi Santoso',
+      noHp: '081211110003',
+      jenisKelamin: 'L',
+      pekerjaan: 'Ojek online',
+      statusEkonomi: 'sedang',
+      createdBy,
+    }),
+  ]);
+
+  return { keluarga, warga };
+}
+
+async function seedUmkm(params: {
+  rtId: number;
+  kelurahanId: number;
+  wargaId: number;
+  createdBy: number;
+}) {
+  const umkm = await prisma.umkm.upsert({
+    where: { kodeUmkm: 'UMKM-KPK-001' },
+    update: {
+      status: 'aktif',
+      omzetBulananEst: 8500000,
+      jumlahKaryawan: 2,
+      aktif: true,
+    },
+    create: {
+      kodeUmkm: 'UMKM-KPK-001',
+      namaUsaha: 'Nasi Uduk Kapuk Berkah',
+      pemilikNama: 'Ahmad Fauzi',
+      wargaId: params.wargaId,
+      rtId: params.rtId,
+      kelurahanId: params.kelurahanId,
+      kategori: 'kuliner',
+      produkUtama: 'Nasi uduk dan lauk rumahan',
+      status: 'aktif',
+      omzetBulananEst: 8500000,
+      jumlahKaryawan: 2,
+      noHp: '081211110001',
+      alamat: 'Jl. Kapuk Raya, RW 001',
+      createdBy: params.createdBy,
+    },
+  });
+
+  const warmindo = await prisma.warmindoOutlet.upsert({
+    where: { kodeOutlet: 'WRM-KPK-001' },
+    update: {
+      status: 'aktif',
+      kelurahanId: params.kelurahanId,
+      rtId: params.rtId,
+      aktif: true,
+    },
+    create: {
+      kodeOutlet: 'WRM-KPK-001',
+      namaOutlet: 'Warmindo Kapuk Produktif',
+      kelurahanId: params.kelurahanId,
+      rtId: params.rtId,
+      alamat: 'Jl. Kapuk Raya No. 12',
+      status: 'aktif',
+      modalAwal: 20000000,
+      targetOmzetHarian: 1000000,
+      targetLabaBulanan: 3000000,
+      biayaSewaBulanan: 1500000,
+      karyawanTotal: 3,
+      tanggalBuka: new Date('2026-01-10T00:00:00.000Z'),
+    },
+  });
+
+  await Promise.all(
+    [
+      { namaBahan: 'Mie Instan Karton', satuan: 'karton', stokSaatIni: 18, stokMinimum: 5, hargaBeli: 95000, hargaJual: 3500 },
+      { namaBahan: 'Telur Ayam', satuan: 'kg', stokSaatIni: 10, stokMinimum: 3, hargaBeli: 27000, hargaJual: 3000 },
+      { namaBahan: 'Gas LPG 3kg', satuan: 'tabung', stokSaatIni: 4, stokMinimum: 2, hargaBeli: 20000, hargaJual: 0 },
+    ].map((item) =>
+      prisma.warmindoInventory.upsert({
+        where: { warmindoId_namaBahan: { warmindoId: warmindo.id, namaBahan: item.namaBahan } },
+        update: item,
+        create: { warmindoId: warmindo.id, ...item },
+      }),
+    ),
+  );
+
+  const transaksiTanggal = new Date('2026-05-13T08:00:00.000Z');
+  const existingTransaksi = await prisma.warmindoTransaksi.findFirst({
+    where: { warmindoId: warmindo.id, tanggal: transaksiTanggal },
+  });
+  const transaksiData = {
+    tanggal: transaksiTanggal,
+    totalOmzet: 920000,
+    totalHpp: 598000,
+    grossProfit: 322000,
+    jumlahItem: 62,
+    items: [{ nama: 'Mie goreng telur', qty: 32, harga: 15000 }],
+    catatan: 'Sample omzet harian untuk local runtime.',
+  };
+
+  if (existingTransaksi) {
+    await prisma.warmindoTransaksi.update({
+      where: { id: existingTransaksi.id },
+      data: transaksiData,
+    });
+  } else {
+    await prisma.warmindoTransaksi.create({
+      data: {
+        warmindoId: warmindo.id,
+        ...transaksiData,
+      },
+    });
+  }
+
+  return { umkm, warmindo };
+}
+
+async function seedOperationalSamples(params: {
+  rtId: number;
+  kelurahanId: number;
+  createdBy: number;
+  keluargaId: number;
+  warmindoId: number;
+}) {
+  const bantuanData = {
+    nama: 'Sembako Prioritas Lokal',
+    tipe: 'sembako',
+    deskripsi: 'Paket beras, minyak, gula, dan protein untuk keluarga prioritas.',
+    satuan: 'paket',
+    nilaiPerSatuan: 175000,
+    stokTotal: 50,
+    stokTersisa: 47,
+    sumber: 'Program JAKDATA Lokal',
+    tanggalMasuk: new Date('2026-05-01T00:00:00.000Z'),
+    aktif: true,
+  };
+  const existingBantuan = await prisma.bantuan.findFirst({
+    where: { nama: bantuanData.nama },
+  });
+  const bantuan = existingBantuan
+    ? await prisma.bantuan.update({ where: { id: existingBantuan.id }, data: bantuanData })
+    : await prisma.bantuan.create({ data: bantuanData });
+
+  const penerimaData = {
+    keluargaId: params.keluargaId,
+    namaPenerima: 'Ahmad Fauzi',
+    rtId: params.rtId,
+    jumlahDiterima: 1,
+    status: 'terjadwal' as const,
+    catatan: 'Sample distribusi bantuan untuk local runtime.',
+  };
+  const existingPenerima = await prisma.bantuanPenerima.findFirst({
+    where: { bantuanId: bantuan.id, keluargaId: params.keluargaId, namaPenerima: penerimaData.namaPenerima },
+  });
+
+  if (existingPenerima) {
+    await prisma.bantuanPenerima.update({
+      where: { id: existingPenerima.id },
+      data: penerimaData,
+    });
+  } else {
+    await prisma.bantuanPenerima.create({
+      data: {
+        bantuanId: bantuan.id,
+        ...penerimaData,
+      },
+    });
+  }
+
+  const laporan = await prisma.laporanWarga.upsert({
+    where: { kodeLaporan: 'JAK-2026-SEED-001' },
+    update: {
+      status: 'baru',
+      urgencyLevel: 'high',
+      kelurahanId: params.kelurahanId,
+      rtId: params.rtId,
+    },
+    create: {
+      kodeLaporan: 'JAK-2026-SEED-001',
+      channelType: 'web',
+      namaPelapor: 'Ibu Siti Ketua RT',
+      noHpPelapor: '081200000001',
+      isiLaporan: 'Dua keluarga prioritas perlu verifikasi bantuan sembako minggu ini.',
+      kategori: 'bantuan',
+      subkategori: 'verifikasi_prioritas',
+      urgencyLevel: 'high',
+      lokasiText: 'RT 001 RW 001 Kapuk',
+      rtId: params.rtId,
+      kelurahanId: params.kelurahanId,
+      status: 'baru',
+      aiSummary: 'Verifikasi bantuan sembako untuk keluarga prioritas.',
+      aiRecommendation: 'Petugas lapangan melakukan kunjungan dan memperbarui status keluarga.',
+      createdBy: params.createdBy,
+    },
+  });
+
+  await prisma.operationalAlert.upsert({
+    where: { kodeAlert: 'OPS-KPK-001' },
+    update: {
+      status: 'open',
+      severity: 'high',
+      entityId: laporan.id,
+      wilayahId: params.rtId,
+    },
+    create: {
+      kodeAlert: 'OPS-KPK-001',
+      kategori: 'bantuan',
+      severity: 'high',
+      status: 'open',
+      judul: 'Verifikasi bantuan prioritas tertunda',
+      deskripsi: 'Sample alert untuk memantau tindak lanjut laporan bantuan warga.',
+      source: 'seed',
+      entityType: 'laporan_warga',
+      entityId: laporan.id,
+      wilayahLevel: 'rt',
+      wilayahId: params.rtId,
+      metadata: { kodeLaporan: laporan.kodeLaporan },
+      createdBy: params.createdBy,
+    },
+  });
+
+  await prisma.operationalAlert.upsert({
+    where: { kodeAlert: 'OPS-KPK-002' },
+    update: {
+      status: 'open',
+      severity: 'medium',
+      entityId: params.warmindoId,
+      wilayahId: params.kelurahanId,
+    },
+    create: {
+      kodeAlert: 'OPS-KPK-002',
+      kategori: 'umkm',
+      severity: 'medium',
+      status: 'open',
+      judul: 'Warmindo perlu cek stok minimum',
+      deskripsi: 'Sample alert operasional untuk stok bahan baku UMKM/Warmindo.',
+      source: 'seed',
+      entityType: 'warmindo_outlet',
+      entityId: params.warmindoId,
+      wilayahLevel: 'kelurahan',
+      wilayahId: params.kelurahanId,
+      metadata: { indikator: 'stok_minimum' },
+      createdBy: params.createdBy,
+    },
+  });
+
+  return { bantuan, laporan };
+}
+
+async function main() {
+  console.log('Seeding local JAKDATA operational foundation...');
+
+  const wilayah = await seedWilayah();
+  const users = await seedUsers(wilayah.rt001.id, wilayah.kelurahan.id);
+  const warga = await seedWarga(wilayah.rt001.id, users.admin.id);
+  const umkm = await seedUmkm({
+    rtId: wilayah.rt001.id,
+    kelurahanId: wilayah.kelurahan.id,
+    wargaId: warga.warga[0].id,
+    createdBy: users.admin.id,
+  });
+  await seedOperationalSamples({
+    rtId: wilayah.rt001.id,
+    kelurahanId: wilayah.kelurahan.id,
+    createdBy: users.admin.id,
+    keluargaId: warga.keluarga.id,
+    warmindoId: umkm.warmindo.id,
+  });
+
+  const [wilayahCount, wargaCount, umkmCount, alertCount] = await Promise.all([
+    prisma.rT.count(),
+    prisma.warga.count(),
+    prisma.umkm.count(),
+    prisma.operationalAlert.count(),
+  ]);
+
+  console.log('Seed complete.');
+  console.log(`RT: ${wilayahCount}`);
+  console.log(`Warga: ${wargaCount}`);
+  console.log(`UMKM: ${umkmCount}`);
+  console.log(`Operational alerts: ${alertCount}`);
+  console.log('Demo login: admin@jakdata.id / admin123');
+}
+
+main()
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
