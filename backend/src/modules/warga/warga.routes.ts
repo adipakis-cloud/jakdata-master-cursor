@@ -1,16 +1,15 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getResidentScopeWhere, getRtScopeWhere } from '../security/security';
 
 export async function wargaRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: [app.authenticate] }, async (req: any) => {
     const user = req.user;
     const { rtId, page = 1, limit = 50, q } = req.query;
-    const where: any = {};
+    const where: any = { ...getResidentScopeWhere(user) };
 
-    if (user.role === 'admin_pusat') {
+    if (['admin_pusat', 'auditor', 'finance_admin'].includes(user.role)) {
       if (rtId) where.rtId = Number(rtId);
-    } else if (user.rtId) {
-      where.rtId = user.rtId;
     }
 
     if (q) where.nama = { contains: q, mode: 'insensitive' };
@@ -37,8 +36,10 @@ export async function wargaRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Nama dan RT wajib diisi' });
     }
 
-    if (user.role === 'petugas_lapangan' && user.rtId && user.rtId !== Number(b.rtId)) {
-      return reply.code(403).send({ error: 'Hanya bisa menambah warga di RT Anda' });
+    const rtScope = getRtScopeWhere(user);
+    if (Object.keys(rtScope).length > 0) {
+      const allowed = await prisma.rT.count({ where: { ...rtScope, id: Number(b.rtId) } });
+      if (!allowed) return reply.code(403).send({ error: 'Tidak bisa menambah warga di luar wilayah Anda' });
     }
 
     const warga = await prisma.warga.create({
@@ -60,9 +61,10 @@ export async function wargaRoutes(app: FastifyInstance) {
   });
 
   app.get('/:id', { preHandler: [app.authenticate] }, async (req: any) => {
+    const user = req.user;
     const id = Number(req.params.id);
-    return prisma.warga.findUnique({
-      where: { id },
+    return prisma.warga.findFirst({
+      where: { id, ...getResidentScopeWhere(user) },
       include: {
         rt: { include: { rw: { include: { kelurahan: { include: { kecamatan: true } } } } } },
         keluarga: true,
@@ -71,8 +73,11 @@ export async function wargaRoutes(app: FastifyInstance) {
   });
 
   app.put('/:id', { preHandler: [app.authenticate] }, async (req: any) => {
+    const user = req.user;
     const id = Number(req.params.id);
     const b = req.body;
+    const existing = await prisma.warga.findFirst({ where: { id, ...getResidentScopeWhere(user) }, select: { id: true } });
+    if (!existing) return { error: 'Warga tidak ditemukan atau di luar wilayah Anda' };
     return prisma.warga.update({
       where: { id },
       data: {
@@ -87,7 +92,7 @@ export async function wargaRoutes(app: FastifyInstance) {
 
   app.get('/keluarga/list', { preHandler: [app.authenticate] }, async (req: any) => {
     const user = req.user;
-    const where: any = user.rtId ? { rtId: user.rtId } : {};
+    const where: any = getResidentScopeWhere(user);
     return prisma.keluarga.findMany({
       where,
       include: { rt: true, _count: { select: { warga: true } } },
@@ -96,7 +101,13 @@ export async function wargaRoutes(app: FastifyInstance) {
   });
 
   app.post('/keluarga', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+    const user = req.user;
     const b = req.body;
+    const rtScope = getRtScopeWhere(user);
+    if (Object.keys(rtScope).length > 0) {
+      const allowed = await prisma.rT.count({ where: { ...rtScope, id: Number(b.rtId) } });
+      if (!allowed) return reply.code(403).send({ error: 'Tidak bisa menambah KK di luar wilayah Anda' });
+    }
     const kk = await prisma.keluarga.create({
       data: {
         rtId: Number(b.rtId),

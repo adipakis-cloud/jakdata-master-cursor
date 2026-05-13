@@ -66,6 +66,64 @@ enum DistribusiStatus {
   ditolak
 }
 
+enum WilayahLevel {
+  kecamatan
+  kelurahan
+  rw
+  rt
+}
+
+enum AssignmentStatus {
+  aktif
+  nonaktif
+  dialihkan
+}
+
+enum BusinessType {
+  umkm
+  warung
+  warmindo
+  supplier
+  koperasi
+  lainnya
+}
+
+enum BusinessStatus {
+  rencana
+  aktif
+  evaluasi
+  tutup
+}
+
+enum IntelligenceStatus {
+  open
+  investigating
+  resolved
+  dismissed
+}
+
+enum IntelligenceSeverity {
+  critical
+  high
+  medium
+  low
+  info
+}
+
+enum SentimentPolarity {
+  positive
+  neutral
+  negative
+  mixed
+}
+
+enum AiAgentRole {
+  gpt_reasoning
+  claude_audit
+  manus_execution
+  local_orchestrator
+}
+
 // ── USERS & SECURITY ─────────────────────────────────────────────
 
 model User {
@@ -97,6 +155,8 @@ model User {
   laporanWarga  LaporanWarga[]
   aiTasks       AiTask[]
   designJobs    DesignJob[]
+  wilayahAssignments WilayahAssignment[] @relation("WilayahAssignmentUser")
+  wilayahAssignmentsCreated WilayahAssignment[] @relation("WilayahAssignmentCreatedBy")
 
   @@index([email])
   @@index([role])
@@ -179,6 +239,8 @@ model Kecamatan {
   kota      Kota        @relation(fields: [kotaId], references: [id])
   kelurahan Kelurahan[]
   users     User[]
+  wilayahAssignments WilayahAssignment[]
+  laporanWarga LaporanWarga[]
 
   @@unique([kotaId, nama])
   @@index([kotaId])
@@ -195,6 +257,9 @@ model Kelurahan {
   kecamatan   Kecamatan @relation(fields: [kecamatanId], references: [id])
   rw          RW[]
   users       User[]
+  wilayahAssignments WilayahAssignment[]
+  laporanWarga LaporanWarga[]
+  warmindoOutlets WarmindoOutlet[]
 
   @@unique([kecamatanId, nama])
   @@index([kecamatanId])
@@ -212,6 +277,7 @@ model RW {
   kelurahan   Kelurahan @relation(fields: [kelurahanId], references: [id])
   rt          RT[]
   users       User[]
+  wilayahAssignments WilayahAssignment[]
 
   @@unique([kelurahanId, nomor])
   @@index([kelurahanId])
@@ -232,10 +298,44 @@ model RT {
   warga       Warga[]
   keluarga    Keluarga[]
   users       User[]
+  wilayahAssignments WilayahAssignment[]
+  laporanWarga LaporanWarga[]
+  bantuanPenerima BantuanPenerima[]
+  warmindoOutlets WarmindoOutlet[]
 
   @@unique([rwId, nomor])
   @@index([rwId])
   @@map("rt")
+}
+
+model WilayahAssignment {
+  id          Int              @id @default(autoincrement())
+  userId      Int              @map("user_id")
+  level       WilayahLevel
+  status      AssignmentStatus @default(aktif)
+  kecamatanId Int?             @map("kecamatan_id")
+  kelurahanId Int?             @map("kelurahan_id")
+  rwId        Int?             @map("rw_id")
+  rtId        Int?             @map("rt_id")
+  assignedBy  Int?             @map("assigned_by")
+  assignedAt  DateTime         @default(now()) @map("assigned_at")
+  revokedAt   DateTime?        @map("revoked_at")
+  catatan     String?
+
+  user          User       @relation("WilayahAssignmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  assignedByUser User?     @relation("WilayahAssignmentCreatedBy", fields: [assignedBy], references: [id], onDelete: SetNull)
+  kecamatan     Kecamatan? @relation(fields: [kecamatanId], references: [id], onDelete: Cascade)
+  kelurahan     Kelurahan? @relation(fields: [kelurahanId], references: [id], onDelete: Cascade)
+  rw            RW?        @relation(fields: [rwId], references: [id], onDelete: Cascade)
+  rt            RT?        @relation(fields: [rtId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([level, status])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rwId])
+  @@index([rtId])
+  @@map("wilayah_assignments")
 }
 
 // ── WARGA ─────────────────────────────────────────────────────────
@@ -332,6 +432,9 @@ model LaporanWarga {
   updatedAt        DateTime     @updatedAt @map("updated_at")
 
   createdByUser User?            @relation(fields: [createdBy], references: [id])
+  rt            RT?              @relation(fields: [rtId], references: [id])
+  kelurahan     Kelurahan?       @relation(fields: [kelurahanId], references: [id])
+  kecamatan     Kecamatan?       @relation(fields: [kecamatanId], references: [id])
   messages      LaporanMessage[]
 
   @@index([status])
@@ -395,8 +498,10 @@ model BantuanPenerima {
 
   bantuan  Bantuan   @relation(fields: [bantuanId], references: [id])
   keluarga Keluarga? @relation(fields: [keluargaId], references: [id])
+  rt       RT?       @relation(fields: [rtId], references: [id])
 
   @@index([bantuanId])
+  @@index([rtId])
   @@index([status])
   @@map("bantuan_penerima")
 }
@@ -427,7 +532,11 @@ model WarmindoOutlet {
   inventory   WarmindoInventory[]
   transaksi   WarmindoTransaksi[]
   pengeluaran WarmindoPengeluaran[]
+  kelurahan   Kelurahan? @relation(fields: [kelurahanId], references: [id])
+  rt          RT?        @relation(fields: [rtId], references: [id])
 
+  @@index([kelurahanId])
+  @@index([rtId])
   @@index([status])
   @@index([aktif])
   @@map("warmindo_outlet")
@@ -484,6 +593,212 @@ model WarmindoPengeluaran {
 
   @@index([warmindoId, tanggal(sort: Desc)])
   @@map("warmindo_pengeluaran")
+}
+
+// ── LOCAL BUSINESS & ECONOMY ───────────────────────────────────────
+
+model LocalBusiness {
+  id                     Int            @id @default(autoincrement())
+  uuid                   String         @unique @default(uuid())
+  nama                   String         @db.VarChar(200)
+  tipe                   BusinessType
+  kategori               String?        @db.VarChar(80)
+  status                 BusinessStatus @default(aktif)
+  kecamatanId            Int?           @map("kecamatan_id")
+  kelurahanId            Int?           @map("kelurahan_id")
+  rwId                   Int?           @map("rw_id")
+  rtId                   Int?           @map("rt_id")
+  alamat                 String?
+  namaPemilik            String?        @map("nama_pemilik") @db.VarChar(150)
+  noHpPemilik            String?        @map("no_hp_pemilik") @db.VarChar(20)
+  estimasiOmzetBulanan   Float?         @map("estimasi_omzet_bulanan")
+  jumlahKaryawan         Int            @default(0) @map("jumlah_karyawan")
+  terverifikasi          Boolean        @default(false)
+  catatan                String?
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @updatedAt @map("updated_at")
+
+  transactions BusinessTransaction[]
+  supplyLinks  SupplyChainLink[]
+
+  @@index([tipe])
+  @@index([status])
+  @@index([kecamatanId])
+  @@index([kelurahanId])
+  @@index([rtId])
+  @@map("local_businesses")
+}
+
+model BusinessTransaction {
+  id              Int      @id @default(autoincrement())
+  businessId      Int      @map("business_id")
+  transactionDate DateTime @default(now()) @map("transaction_date")
+  arah            String   @default("sale") @db.VarChar(20)
+  namaItem        String?  @map("nama_item") @db.VarChar(200)
+  kuantitas       Float    @default(0)
+  satuan          String?  @db.VarChar(30)
+  nilaiTotal      Float    @default(0) @map("nilai_total")
+  metodeBayar     String?  @map("metode_bayar") @db.VarChar(30)
+  segmenPembeli   String?  @map("segmen_pembeli") @db.VarChar(80)
+  catatan         String?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  business LocalBusiness @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId, transactionDate(sort: Desc)])
+  @@index([transactionDate(sort: Desc)])
+  @@map("business_transactions")
+}
+
+model SupplyChainLink {
+  id              Int      @id @default(autoincrement())
+  businessId      Int      @map("business_id")
+  namaSupplier    String   @map("nama_supplier") @db.VarChar(200)
+  namaItem        String   @map("nama_item") @db.VarChar(200)
+  kategori        String?  @db.VarChar(80)
+  wilayahAsal     String?  @map("wilayah_asal") @db.VarChar(200)
+  satuan          String?  @db.VarChar(30)
+  biayaRataSatuan Float?   @map("biaya_rata_satuan")
+  aktif           Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  business LocalBusiness @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([businessId])
+  @@index([namaSupplier])
+  @@index([aktif])
+  @@map("supply_chain_links")
+}
+
+// ── OPERATIONAL INTELLIGENCE ───────────────────────────────────────
+
+model OperationalAlert {
+  id            Int                @id @default(autoincrement())
+  kodeAlert     String             @unique @map("kode_alert") @db.VarChar(30)
+  wilayahLevel  WilayahLevel?      @map("wilayah_level")
+  wilayahId     Int?               @map("wilayah_id")
+  severity      IntelligenceSeverity @default(medium)
+  status        IntelligenceStatus @default(open)
+  sumber        String             @db.VarChar(80)
+  judul         String             @db.VarChar(250)
+  deskripsi     String
+  evidence      Json               @default("{}")
+  detectedAt    DateTime           @default(now()) @map("detected_at")
+  resolvedAt    DateTime?          @map("resolved_at")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([severity])
+  @@index([wilayahLevel, wilayahId])
+  @@index([detectedAt(sort: Desc)])
+  @@map("operational_alerts")
+}
+
+model PublicSentiment {
+  id            Int               @id @default(autoincrement())
+  wilayahLevel  WilayahLevel?     @map("wilayah_level")
+  wilayahId     Int?              @map("wilayah_id")
+  sumber        String            @db.VarChar(80)
+  polarity      SentimentPolarity @default(neutral)
+  score         Float?
+  topik         String?           @db.VarChar(120)
+  ringkasan     String
+  rawSample     Json?             @map("raw_sample")
+  capturedAt    DateTime          @default(now()) @map("captured_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([polarity])
+  @@index([capturedAt(sort: Desc)])
+  @@map("public_sentiments")
+}
+
+model AreaRiskScore {
+  id             Int                  @id @default(autoincrement())
+  wilayahLevel   WilayahLevel         @map("wilayah_level")
+  wilayahId      Int                  @map("wilayah_id")
+  skor           Float
+  riskLevel      IntelligenceSeverity @default(medium) @map("risk_level")
+  faktor         Json                 @default("[]")
+  rekomendasi    Json                 @default("[]")
+  calculatedAt   DateTime             @default(now()) @map("calculated_at")
+  modelUsed      String?              @map("model_used") @db.VarChar(80)
+  createdAt      DateTime             @default(now()) @map("created_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([riskLevel])
+  @@index([calculatedAt(sort: Desc)])
+  @@map("area_risk_scores")
+}
+
+model AnomalyDetection {
+  id             Int                  @id @default(autoincrement())
+  tipe           String               @db.VarChar(80)
+  wilayahLevel   WilayahLevel?        @map("wilayah_level")
+  wilayahId      Int?                 @map("wilayah_id")
+  severity       IntelligenceSeverity @default(medium)
+  status         IntelligenceStatus   @default(open)
+  metricName     String               @map("metric_name") @db.VarChar(120)
+  observedValue  Float?               @map("observed_value")
+  expectedValue  Float?               @map("expected_value")
+  evidence       Json                 @default("{}")
+  aiExplanation  String?              @map("ai_explanation")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  resolvedAt     DateTime?            @map("resolved_at")
+
+  @@index([status])
+  @@index([severity])
+  @@index([wilayahLevel, wilayahId])
+  @@index([createdAt(sort: Desc)])
+  @@map("anomaly_detections")
+}
+
+model AiRecommendation {
+  id            Int          @id @default(autoincrement())
+  agentRole     AiAgentRole  @map("agent_role")
+  domain        String       @db.VarChar(80)
+  wilayahLevel  WilayahLevel? @map("wilayah_level")
+  wilayahId     Int?         @map("wilayah_id")
+  judul         String       @db.VarChar(250)
+  rekomendasi   String
+  rationale     String?
+  prioritas     IntelligenceSeverity @default(medium)
+  status        String       @default("open") @db.VarChar(30)
+  sourceRefType String?      @map("source_ref_type") @db.VarChar(80)
+  sourceRefId   Int?         @map("source_ref_id")
+  outputData    Json?        @map("output_data")
+  decidedAt     DateTime?    @map("decided_at")
+  completedAt   DateTime?    @map("completed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  @@index([agentRole])
+  @@index([domain])
+  @@index([prioritas])
+  @@index([wilayahLevel, wilayahId])
+  @@index([createdAt(sort: Desc)])
+  @@map("ai_recommendations")
+}
+
+model AiOrchestrationRun {
+  id           Int          @id @default(autoincrement())
+  agentRole    AiAgentRole  @map("agent_role")
+  provider     String       @db.VarChar(80)
+  modelName    String?      @map("model_name") @db.VarChar(120)
+  taskType     String       @map("task_type") @db.VarChar(80)
+  inputData    Json         @map("input_data")
+  outputData   Json?        @map("output_data")
+  status       AiTaskStatus @default(pending)
+  errorMessage String?      @map("error_message")
+  startedAt    DateTime?    @map("started_at")
+  doneAt       DateTime?    @map("done_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  @@index([agentRole])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+  @@map("ai_orchestration_runs")
 }
 
 // ── FILES ─────────────────────────────────────────────────────────

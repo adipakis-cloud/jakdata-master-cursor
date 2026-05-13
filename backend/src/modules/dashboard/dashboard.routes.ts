@@ -1,34 +1,37 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getLaporanScopeWhere, getResidentScopeWhere, getRtScopeWhere, getWarmindoScopeWhere } from '../security/security';
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.get('/summary', { preHandler: [app.authenticate] }, async (req) => {
     const user = req.user as any;
-    const wargaWhere: any = {};
-    const laporanWhere: any = {};
-    if (user.role !== 'admin_pusat' && user.rtId) {
-      wargaWhere.rtId = user.rtId;
-      laporanWhere.rtId = user.rtId;
-    }
+    const wargaWhere = getResidentScopeWhere(user);
+    const keluargaWhere = getResidentScopeWhere(user);
+    const rtWhere = getRtScopeWhere(user);
+    const laporanWhere = getLaporanScopeWhere(user);
+    const warmindoWhere = getWarmindoScopeWhere(user);
     const today = new Date(); today.setHours(0,0,0,0);
+    const omzetWhere: any = { tanggal: { gte: today } };
+    if (Object.keys(warmindoWhere).length > 0) omzetWhere.warmindo = { is: warmindoWhere };
 
     const [totalWarga, totalKK, totalRT, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif] = await Promise.all([
       prisma.warga.count({ where: wargaWhere }),
-      prisma.keluarga.count(),
-      prisma.rT.count(),
+      prisma.keluarga.count({ where: keluargaWhere }),
+      prisma.rT.count({ where: rtWhere }),
       prisma.laporanWarga.count({ where: { ...laporanWhere, createdAt: { gte: today } } }),
       prisma.laporanWarga.count({ where: { ...laporanWhere, urgencyLevel: 'critical', status: { not: 'selesai' } } }),
       prisma.laporanWarga.count({ where: { ...laporanWhere, status: { notIn: ['selesai','ditolak'] } } }),
-      prisma.warmindoOutlet.count({ where: { status: 'aktif' } }),
+      prisma.warmindoOutlet.count({ where: { ...warmindoWhere, status: 'aktif' } }),
     ]);
 
     const allRT = await prisma.rT.findMany({
+      where: rtWhere,
       include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: { include: { kecamatan: true } } } } },
     });
 
-    const rtKurang = allRT.filter(r => r._count.warga < 10).map(r => ({
+    const rtKurang = allRT.filter(r => r._count.warga < r.targetWarga).map(r => ({
       id: r.id, nomor: r.nomor, jumlahWarga: r._count.warga,
-      rw: r.rw.nomor, kelurahan: r.rw.kelurahan.nama, kecamatan: r.rw.kelurahan.kecamatan.nama,
+      targetWarga: r.targetWarga, rw: r.rw.nomor, kelurahan: r.rw.kelurahan.nama, kecamatan: r.rw.kelurahan.kecamatan.nama,
     })).slice(0, 15);
 
     const recentLaporan = await prisma.laporanWarga.findMany({
@@ -37,11 +40,11 @@ export async function dashboardRoutes(app: FastifyInstance) {
     });
 
     const omzetHariIni = await prisma.warmindoTransaksi.aggregate({
-      where: { tanggal: { gte: today } }, _sum: { totalOmzet: true, grossProfit: true },
+      where: omzetWhere, _sum: { totalOmzet: true, grossProfit: true },
     });
 
     return {
-      stats: { totalWarga, totalKK, totalRT, rtBelumLengkap: allRT.filter(r => r._count.warga < 10).length, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif, omzetHariIni: omzetHariIni._sum.totalOmzet ?? 0, labaHariIni: omzetHariIni._sum.grossProfit ?? 0 },
+      stats: { totalWarga, totalKK, totalRT, rtBelumLengkap: allRT.filter(r => r._count.warga < r.targetWarga).length, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif, omzetHariIni: omzetHariIni._sum.totalOmzet ?? 0, labaHariIni: omzetHariIni._sum.grossProfit ?? 0 },
       rtKurang, recentLaporan,
     };
   });

@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../../config/prisma';
 
 // ── BRUTE FORCE PROTECTION ────────────────────────────────────────
@@ -62,6 +61,102 @@ export function getTerritoryFilter(user: any) {
     return filter;
   }
   return filter;
+}
+
+const UNSCOPED_ROLES = ['admin_pusat', 'auditor', 'finance_admin'];
+const NO_MATCH_ID = -1;
+
+function isUnscopedRole(role: string) {
+  return UNSCOPED_ROLES.includes(role);
+}
+
+export function getRtScopeWhere(user: any) {
+  const role = user?.role;
+  if (isUnscopedRole(role)) return {};
+  if (role === 'koordinator_kecamatan') {
+    return user.kecamatanId ? { rw: { kelurahan: { kecamatanId: user.kecamatanId } } } : { id: NO_MATCH_ID };
+  }
+  if (role === 'koordinator_kelurahan') {
+    return user.kelurahanId ? { rw: { kelurahanId: user.kelurahanId } } : { id: NO_MATCH_ID };
+  }
+  if (role === 'koordinator_rw') {
+    return user.rwId ? { rwId: user.rwId } : { id: NO_MATCH_ID };
+  }
+  if (role === 'koordinator_rt' || role === 'petugas_lapangan') {
+    return user.rtId ? { id: user.rtId } : { id: NO_MATCH_ID };
+  }
+  return {};
+}
+
+export function getResidentScopeWhere(user: any) {
+  const rtWhere = getRtScopeWhere(user);
+  if (Object.keys(rtWhere).length === 0) return {};
+  if (typeof rtWhere.id === 'number') return { rtId: rtWhere.id };
+  return { rt: rtWhere };
+}
+
+export function getLaporanScopeWhere(user: any) {
+  const role = user?.role;
+  if (isUnscopedRole(role)) return {};
+  if (role === 'koordinator_kecamatan') {
+    if (!user.kecamatanId) return { id: NO_MATCH_ID };
+    return {
+      OR: [
+        { kecamatanId: user.kecamatanId },
+        { kelurahan: { kecamatanId: user.kecamatanId } },
+        { rt: { rw: { kelurahan: { kecamatanId: user.kecamatanId } } } },
+      ],
+    };
+  }
+  if (role === 'koordinator_kelurahan') {
+    if (!user.kelurahanId) return { id: NO_MATCH_ID };
+    return {
+      OR: [
+        { kelurahanId: user.kelurahanId },
+        { rt: { rw: { kelurahanId: user.kelurahanId } } },
+      ],
+    };
+  }
+  if (role === 'koordinator_rw') {
+    return user.rwId ? { rt: { rwId: user.rwId } } : { id: NO_MATCH_ID };
+  }
+  if (role === 'koordinator_rt' || role === 'petugas_lapangan') {
+    return user.rtId ? { rtId: user.rtId } : { id: NO_MATCH_ID };
+  }
+  return {};
+}
+
+export function getWarmindoScopeWhere(user: any) {
+  const role = user?.role;
+  if (isUnscopedRole(role)) return {};
+  if (role === 'manager_warmindo' || role === 'kasir_warmindo') {
+    return user.warmindoId ? { id: user.warmindoId } : { id: NO_MATCH_ID };
+  }
+  if (role === 'koordinator_kecamatan') {
+    if (!user.kecamatanId) return { id: NO_MATCH_ID };
+    return {
+      OR: [
+        { kelurahan: { kecamatanId: user.kecamatanId } },
+        { rt: { rw: { kelurahan: { kecamatanId: user.kecamatanId } } } },
+      ],
+    };
+  }
+  if (role === 'koordinator_kelurahan') {
+    if (!user.kelurahanId) return { id: NO_MATCH_ID };
+    return {
+      OR: [
+        { kelurahanId: user.kelurahanId },
+        { rt: { rw: { kelurahanId: user.kelurahanId } } },
+      ],
+    };
+  }
+  if (role === 'koordinator_rw') {
+    return user.rwId ? { rt: { rwId: user.rwId } } : { id: NO_MATCH_ID };
+  }
+  if (role === 'koordinator_rt' || role === 'petugas_lapangan') {
+    return user.rtId ? { rtId: user.rtId } : { id: NO_MATCH_ID };
+  }
+  return {};
 }
 
 // ── PHONE MASKING ─────────────────────────────────────────────────
