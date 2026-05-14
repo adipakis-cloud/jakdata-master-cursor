@@ -12,7 +12,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     }
     const today = new Date(); today.setHours(0,0,0,0);
 
-    const [totalWarga, totalKK, totalRT, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif] = await Promise.all([
+    const [totalWarga, totalKK, totalRT, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif, totalBantuan, bantuanAktif, aiAlerts] = await Promise.all([
       prisma.warga.count({ where: wargaWhere }),
       prisma.keluarga.count(),
       prisma.rT.count(),
@@ -20,6 +20,9 @@ export async function dashboardRoutes(app: FastifyInstance) {
       prisma.laporanWarga.count({ where: { ...laporanWhere, urgencyLevel: 'critical', status: { not: 'selesai' } } }),
       prisma.laporanWarga.count({ where: { ...laporanWhere, status: { notIn: ['selesai','ditolak'] } } }),
       prisma.warmindoOutlet.count({ where: { status: 'aktif' } }),
+      prisma.bantuan.count(),
+      prisma.bantuan.count({ where: { aktif: true } }),
+      prisma.operationalAlert.count({ where: { status: { in: ['open','acknowledged'] } } }),
     ]);
 
     const allRT = await prisma.rT.findMany({
@@ -41,7 +44,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
     });
 
     return {
-      stats: { totalWarga, totalKK, totalRT, rtBelumLengkap: allRT.filter(r => r._count.warga < 10).length, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif, omzetHariIni: omzetHariIni._sum.totalOmzet ?? 0, labaHariIni: omzetHariIni._sum.grossProfit ?? 0 },
+      stats: { totalWarga, totalKK, totalRT, rtBelumLengkap: allRT.filter(r => r._count.warga < 10).length, laporanHariIni, laporanCritical, laporanBelumSelesai, warmindoAktif, totalBantuan, bantuanAktif, aiAlerts, omzetHariIni: omzetHariIni._sum.totalOmzet ?? 0, labaHariIni: omzetHariIni._sum.grossProfit ?? 0 },
       rtKurang, recentLaporan,
     };
   });

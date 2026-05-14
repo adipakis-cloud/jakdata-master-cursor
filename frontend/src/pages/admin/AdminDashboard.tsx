@@ -101,11 +101,13 @@ export function AdminDashboard() {
 
       <div>
         <h2 className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Statistik Wilayah DKI Jakarta</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <StatCard label="Total Warga" value={fmt(s.totalWarga)} sub={`${fmt(s.totalKK??0)} KK terdaftar`} icon="👥" color="blue" />
           <StatCard label="RT Belum Lengkap" value={s.rtBelumLengkap} sub={`dari ${fmt(s.totalRT)} RT · target 10 warga`} icon="⚠️" color={s.rtBelumLengkap>0?'orange':'green'} />
           <StatCard label="Laporan Critical" value={s.laporanCritical} sub={`${s.laporanBelumSelesai??0} belum selesai`} icon="🚨" color={s.laporanCritical>0?'red':'green'} />
           <StatCard label="Warmindo Aktif" value={s.warmindoAktif} sub={`Omzet: ${fmtRp(s.omzetHariIni??0)}/hari`} icon="🍜" color="purple" />
+          <StatCard label="Bantuan Aktif" value={s.bantuanAktif} sub={`${fmt(s.totalBantuan??0)} program total`} icon="🎁" color="green" />
+          <StatCard label="AI Alerts" value={s.aiAlerts} sub="operational/fairness alerts" icon="🤖" color={s.aiAlerts>0?'orange':'green'} />
         </div>
       </div>
 

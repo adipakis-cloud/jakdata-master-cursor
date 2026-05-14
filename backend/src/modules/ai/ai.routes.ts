@@ -33,15 +33,27 @@ export async function aiRoutes(app: FastifyInstance) {
   );
 
   app.get('/recommendations', { preHandler: [app.authenticate] }, async () => {
-    const [rtKurang, laporanCritical] = await Promise.all([
+    const [rtKurang, laporanCritical, alerts, inventory, aidFairnessReports] = await Promise.all([
       prisma.rT.findMany({ include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: true } } } })
         .then(rts => rts.filter(r => r._count.warga < 10).slice(0, 5)),
       prisma.laporanWarga.findMany({ where: { urgencyLevel: 'critical', status: { not: 'selesai' } }, take: 5 }),
+      prisma.operationalAlert.findMany({ where: { status: 'open' }, orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }], take: 8 }),
+      prisma.warmindoInventory.findMany({ include: { warmindo: true }, take: 100 }),
+      prisma.aiReport.findMany({ where: { tipe: { in: ['daily_operational_stress','kelurahan_kapuk_poverty_risk'] } }, orderBy: { createdAt: 'desc' }, take: 3 }),
     ]);
+    const lowStock = inventory.filter(i => i.stokSaatIni <= i.stokMinimum).slice(0, 5);
     return {
       wilayah: rtKurang.map(r => ({ tipe: 'data_lemah', pesan: `RT ${r.nomor} RW ${r.rw.nomor} ${r.rw.kelurahan.nama} baru ${r._count.warga} warga (target: 10)`, prioritas: 'high' })),
       laporan: laporanCritical.map(l => ({ tipe: 'critical_report', pesan: `[${l.kodeLaporan}] ${l.kategori}: ${(l.aiSummary ?? l.isiLaporan).slice(0, 60)}`, prioritas: 'critical' })),
-      warmindo: [],
+      warmindo: [
+        ...lowStock.map(i => ({ tipe: 'low_stock', pesan: `${i.warmindo.namaOutlet}: ${i.namaBahan} tersisa ${i.stokSaatIni} ${i.satuan} (minimum ${i.stokMinimum})`, prioritas: 'high' })),
+        ...alerts.filter(a => a.kategori === 'warmindo').map(a => ({ tipe: 'warmindo_alert', pesan: `${a.judul}: ${a.deskripsi}`, prioritas: a.severity })),
+      ],
+      bantuan: [
+        ...alerts.filter(a => a.kategori === 'aid_fairness').map(a => ({ tipe: 'aid_fairness', pesan: `${a.judul}: ${a.deskripsi}`, prioritas: a.severity })),
+        ...aidFairnessReports.flatMap(r => (r.rekomendasi as any[]).map((x: any) => ({ tipe: r.tipe, pesan: x.aksi ?? r.ringkasan, prioritas: x.prioritas ?? 'high' }))).slice(0, 5),
+      ],
+      governance: alerts.filter(a => a.kategori === 'governance').map(a => ({ tipe: 'governance_alert', pesan: `${a.judul}: ${a.deskripsi}`, prioritas: a.severity })),
     };
   });
 }

@@ -421,13 +421,13 @@ export function AdminAI() {
         <h2 className="font-semibold mb-4">🤖 Rekomendasi AI Terkini</h2>
         {loading ? <p className="text-gray-400 text-sm">Menganalisis data...</p> :
         <div className="space-y-2">
-          {[...(recs?.wilayah??[]), ...(recs?.laporan??[]), ...(recs?.warmindo??[])].map((r:any,i:number) => (
+          {[...(recs?.wilayah??[]), ...(recs?.laporan??[]), ...(recs?.warmindo??[]), ...(recs?.bantuan??[]), ...(recs?.governance??[])].map((r:any,i:number) => (
             <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
               <span className={prioColors[r.prioritas] ?? 'badge-gray'}>{r.prioritas}</span>
               <p className="text-sm text-gray-700">{r.pesan}</p>
             </div>
           ))}
-          {(!recs || ([...(recs?.wilayah??[]), ...(recs?.laporan??[])].length===0)) && <p className="text-gray-400 text-sm">Tidak ada rekomendasi saat ini. Semua indikator normal.</p>}
+          {(!recs || ([...(recs?.wilayah??[]), ...(recs?.laporan??[]), ...(recs?.warmindo??[]), ...(recs?.bantuan??[]), ...(recs?.governance??[])].length===0)) && <p className="text-gray-400 text-sm">Tidak ada rekomendasi saat ini. Semua indikator normal.</p>}
         </div>}
       </div>
 

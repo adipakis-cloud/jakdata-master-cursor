@@ -40,11 +40,15 @@ export function getTerritoryFilter(user: any) {
   if (role === 'admin_pusat' || role === 'auditor' || role === 'finance_admin') {
     return filter; // Semua wilayah
   }
-  if (role === 'koordinator_kecamatan') {
+  if (role === 'admin_kota') {
+    filter.kotaId = user.kotaId;
+    return filter;
+  }
+  if (role === 'admin_kecamatan' || role === 'koordinator_kecamatan') {
     filter.kecamatanId = user.kecamatanId;
     return filter;
   }
-  if (role === 'koordinator_kelurahan') {
+  if (role === 'admin_kelurahan' || role === 'koordinator_kelurahan') {
     filter.kelurahanId = user.kelurahanId;
     return filter;
   }
