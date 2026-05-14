@@ -222,13 +222,19 @@ export function AdminLaporan() {
 // ── AdminWarmindo.tsx ─────────────────────────────────────────────
 export function AdminWarmindo() {
   const [outlets, setOutlets] = useState<any[]>([]);
+  const [summary, setSummary] = useState<any>(null);
   const [selected, setSelected] = useState<any>(null);
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showTrxForm, setShowTrxForm] = useState(false);
   const [trxForm, setTrxForm] = useState({ totalOmzet:'', totalHpp:'', jumlahItem:'', catatan:'' });
 
-  useEffect(() => { api.get('/warmindo').then(r=>setOutlets(r.data)).catch(console.error).finally(()=>setLoading(false)); }, []);
+  useEffect(() => {
+    Promise.all([api.get('/warmindo'), api.get('/warmindo/summary')])
+      .then(([o, s]) => { setOutlets(o.data); setSummary(s.data); })
+      .catch(console.error)
+      .finally(()=>setLoading(false));
+  }, []);
 
   async function loadDetail(id: number) {
     const [d, k] = await Promise.all([api.get(`/warmindo/${id}`), api.get(`/warmindo/${id}/keuangan`)]);
@@ -249,6 +255,34 @@ export function AdminWarmindo() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold text-gray-900">Warmindo & UMKM</h1>
+
+      {summary && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="card p-3"><p className="text-xs text-gray-400">Outlet Aktif</p><p className="text-xl font-bold">{summary.activeOutlets}</p></div>
+          <div className="card p-3"><p className="text-xs text-gray-400">Omzet Hari Ini</p><p className="text-xl font-bold">{fmtRp(summary.dailyOmzet)}</p></div>
+          <div className="card p-3"><p className="text-xs text-gray-400">Profit Estimate</p><p className={`text-xl font-bold ${summary.profitEstimate < 0 ? 'text-red-600' : 'text-green-600'}`}>{fmtRp(summary.profitEstimate)}</p></div>
+          <div className="card p-3"><p className="text-xs text-gray-400">Issue Staff/Stok</p><p className="text-xl font-bold text-orange-600">{(summary.staffAttendanceIssues??0) + (summary.lowStock?.length??0)}</p></div>
+        </div>
+      )}
+
+      {summary?.topProducts?.length > 0 && (
+        <div className="card p-4">
+          <h2 className="font-semibold mb-2">Top Products</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+            {summary.topProducts.map((p:any) => <div key={p.productName} className="bg-gray-50 rounded-lg p-2"><p className="text-sm font-semibold">{p.productName}</p><p className="text-xs text-gray-500">{p.qty} terjual · {fmtRp(p.total)}</p></div>)}
+          </div>
+        </div>
+      )}
+
+      {summary?.lowStock?.length > 0 && (
+        <div className="card p-4 border-l-4 border-orange-400">
+          <h2 className="font-semibold mb-2 text-orange-700">Low Stock & Operational Issues</h2>
+          <div className="space-y-1 text-sm">
+            {summary.lowStock.slice(0,6).map((i:any,idx:number)=><p key={idx}>{i.outlet}: <b>{i.item}</b> {i.stok}/{i.minimum} {i.satuan}</p>)}
+            {summary.problematicOutlet && <p className="text-red-600 font-semibold">Problematic outlet: {summary.problematicOutlet.namaOutlet}</p>}
+          </div>
+        </div>
+      )}
 
       {loading ? <div className="p-8 text-center text-gray-400">Memuat...</div> :
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -332,10 +366,11 @@ export function AdminWarmindo() {
 export function AdminBantuan() {
   const [bantuan, setBantuan] = useState<any[]>([]);
   const [penerima, setPenerima] = useState<any[]>([]);
+  const [fairness, setFairness] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([api.get('/bantuan'), api.get('/bantuan/penerima')]).then(([b,p]) => { setBantuan(b.data); setPenerima(p.data); }).catch(console.error).finally(() => setLoading(false));
+    Promise.all([api.get('/bantuan'), api.get('/bantuan/penerima'), api.get('/bantuan/fairness')]).then(([b,p,f]) => { setBantuan(b.data); setPenerima(p.data); setFairness(f.data); }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   const fmtRp = (n:number) => `Rp${(n??0).toLocaleString('id-ID')}`;
@@ -345,6 +380,15 @@ export function AdminBantuan() {
       <h1 className="text-xl font-bold text-gray-900">Manajemen Bantuan</h1>
       {loading ? <div className="p-8 text-center text-gray-400">Memuat...</div> :
       <>
+        {fairness && (
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="card p-3"><p className="text-xs text-gray-400">Fairness Score</p><p className={`text-xl font-bold ${(fairness.snapshot?.fairnessScore??0)<70?'text-red-600':'text-green-600'}`}>{fairness.snapshot?.fairnessScore ?? 0}</p></div>
+            <div className="card p-3"><p className="text-xs text-gray-400">Repeated Recipients</p><p className="text-xl font-bold text-orange-600">{fairness.repeatedRecipients?.length ?? 0}</p></div>
+            <div className="card p-3"><p className="text-xs text-gray-400">High-Risk Uncovered</p><p className="text-xl font-bold text-red-600">{fairness.uncoveredFamilies?.length ?? 0}</p></div>
+            <div className="card p-3"><p className="text-xs text-gray-400">Aid Anomalies</p><p className="text-xl font-bold">{fairness.anomalies?.length ?? 0}</p></div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {bantuan.map((b:any) => (
             <div key={b.id} className="card p-4">
@@ -364,6 +408,20 @@ export function AdminBantuan() {
             </div>
           ))}
         </div>
+
+        {fairness?.anomalies?.length > 0 && (
+          <div className="card overflow-hidden">
+            <div className="p-4 border-b border-gray-100"><h2 className="font-semibold">Fairness & Aid Anomaly List</h2></div>
+            <div className="divide-y divide-gray-50">
+              {fairness.anomalies.slice(0,8).map((a:any)=>(
+                <div key={a.id} className="p-3 text-sm">
+                  <div className="flex justify-between gap-3"><p className="font-semibold">{a.title}</p><span className={a.severity==='critical'?'badge-red':'badge-orange'}>{a.severity}</span></div>
+                  <p className="text-gray-500 text-xs mt-1">{a.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="card overflow-hidden">
           <div className="p-4 border-b border-gray-100"><h2 className="font-semibold">Daftar Penerima Bantuan</h2></div>
@@ -385,12 +443,18 @@ export function AdminBantuan() {
 // ── AdminAI.tsx ───────────────────────────────────────────────────
 export function AdminAI() {
   const [recs, setRecs] = useState<any>(null);
+  const [memory, setMemory] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [designForm, setDesignForm] = useState({ platform:'instagram', prompt:'' });
   const [designResult, setDesignResult] = useState('');
   const [designing, setDesigning] = useState(false);
 
-  useEffect(() => { api.get('/ai/recommendations').then(r=>setRecs(r.data)).catch(console.error).finally(()=>setLoading(false)); }, []);
+  useEffect(() => {
+    Promise.all([api.get('/ai/recommendations'), api.get('/ai/memory')])
+      .then(([r,m]) => { setRecs(r.data); setMemory(m.data); })
+      .catch(console.error)
+      .finally(()=>setLoading(false));
+  }, []);
 
   async function generateContent() {
     if (!designForm.prompt) return;
@@ -421,15 +485,33 @@ export function AdminAI() {
         <h2 className="font-semibold mb-4">🤖 Rekomendasi AI Terkini</h2>
         {loading ? <p className="text-gray-400 text-sm">Menganalisis data...</p> :
         <div className="space-y-2">
-          {[...(recs?.wilayah??[]), ...(recs?.laporan??[]), ...(recs?.warmindo??[])].map((r:any,i:number) => (
+          {[...(recs?.wilayah??[]), ...(recs?.laporan??[]), ...(recs?.warmindo??[]), ...(recs?.bantuan??[]), ...(recs?.governance??[]), ...(recs?.memory??[])].map((r:any,i:number) => (
             <div key={i} className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg">
               <span className={prioColors[r.prioritas] ?? 'badge-gray'}>{r.prioritas}</span>
               <p className="text-sm text-gray-700">{r.pesan}</p>
             </div>
           ))}
-          {(!recs || ([...(recs?.wilayah??[]), ...(recs?.laporan??[])].length===0)) && <p className="text-gray-400 text-sm">Tidak ada rekomendasi saat ini. Semua indikator normal.</p>}
+          {(!recs || ([...(recs?.wilayah??[]), ...(recs?.laporan??[]), ...(recs?.warmindo??[]), ...(recs?.bantuan??[]), ...(recs?.governance??[]), ...(recs?.memory??[])].length===0)) && <p className="text-gray-400 text-sm">Tidak ada rekomendasi saat ini. Semua indikator normal.</p>}
         </div>}
       </div>
+
+      {memory && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="card p-4">
+            <h2 className="font-semibold mb-3">AI Observations</h2>
+            <div className="space-y-2">
+              {memory.observations?.slice(0,5).map((o:any)=><div key={o.id} className="bg-gray-50 rounded-lg p-3"><div className="flex justify-between"><p className="font-semibold text-sm">{o.title}</p><span className={prioColors[o.severity]??'badge-gray'}>{o.severity}</span></div><p className="text-xs text-gray-500 mt-1">{o.summary}</p></div>)}
+            </div>
+          </div>
+          <div className="card p-4">
+            <h2 className="font-semibold mb-3">Decision & Outcome Tracking</h2>
+            <div className="space-y-2">
+              {memory.recommendations?.slice(0,4).map((r:any)=><div key={r.id} className="bg-gray-50 rounded-lg p-3"><div className="flex justify-between"><p className="font-semibold text-sm">{r.domain}</p><span className={r.status==='accepted'?'badge-green':r.status==='rejected'||r.status==='failed'?'badge-red':'badge-yellow'}>{r.status}</span></div><p className="text-xs text-gray-500 mt-1">{r.recommendation}</p></div>)}
+              {memory.outcomes?.slice(0,3).map((o:any)=><div key={o.id} className="text-xs bg-blue-50 rounded-lg p-2 text-blue-800">{o.metricName}: {o.baselineValue} → {o.currentValue} / target {o.targetValue} ({o.status})</div>)}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Design Generator */}
       <div className="card p-4">

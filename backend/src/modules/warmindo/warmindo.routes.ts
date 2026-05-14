@@ -2,11 +2,67 @@ import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
 
 export async function warmindoRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: [app.authenticate] }, async () =>
-    prisma.warmindoOutlet.findMany({
+  app.get('/', { preHandler: [app.authenticate] }, async (req: any) => {
+    const where = await warmindoScope(req.user);
+    const outlets = await prisma.warmindoOutlet.findMany({
+      where,
       include: { inventory: true, _count: { select: { transaksi: true } } },
-    })
-  );
+      orderBy: { kodeOutlet: 'asc' },
+    });
+
+    const today = startToday();
+    return Promise.all(outlets.map(async (outlet) => {
+      const [sales, expenses, lowStock, attendanceIssues] = await Promise.all([
+        prisma.warmindoTransaksi.aggregate({ where: { warmindoId: outlet.id, tanggal: { gte: today } }, _sum: { totalOmzet: true, grossProfit: true } }),
+        prisma.warmindoPengeluaran.aggregate({ where: { warmindoId: outlet.id, tanggal: { gte: today } }, _sum: { jumlah: true } }),
+        (prisma as any).warmindoInventory.count({ where: { warmindoId: outlet.id } }).then(async () => outlet.inventory.filter((i: any) => i.stokSaatIni <= i.stokMinimum).length),
+        (prisma as any).warmindoAttendance.count({ where: { warmindoId: outlet.id, tanggal: { gte: today }, status: { in: ['absent','late'] } } }),
+      ]);
+      const grossProfit = sales._sum.grossProfit ?? 0;
+      const totalExpenses = expenses._sum.jumlah ?? 0;
+      return {
+        ...outlet,
+        operationalSummary: {
+          omzetHariIni: sales._sum.totalOmzet ?? 0,
+          profitEstimate: grossProfit - totalExpenses,
+          lowStock,
+          attendanceIssues,
+          problematic: lowStock > 0 || attendanceIssues > 0 || grossProfit - totalExpenses < 0,
+        },
+      };
+    }));
+  });
+
+  app.get('/summary', { preHandler: [app.authenticate] }, async (req: any) => {
+    const where = await warmindoScope(req.user);
+    const outlets = await prisma.warmindoOutlet.findMany({ where, select: { id: true, namaOutlet: true, kodeOutlet: true, status: true } });
+    const outletIds = outlets.map(o => o.id);
+    const today = startToday();
+
+    const [sales, expenses, topProductsRaw, inventory, attendanceIssues, maintenance] = await Promise.all([
+      prisma.warmindoTransaksi.aggregate({ where: { warmindoId: { in: outletIds }, tanggal: { gte: today } }, _sum: { totalOmzet: true, grossProfit: true } }),
+      prisma.warmindoPengeluaran.aggregate({ where: { warmindoId: { in: outletIds }, tanggal: { gte: today } }, _sum: { jumlah: true } }),
+      (prisma as any).warmindoSaleLineItem.groupBy({ by: ['productName'], where: { warmindoId: { in: outletIds } }, _sum: { qty: true, total: true }, orderBy: { _sum: { qty: 'desc' } }, take: 5 }),
+      prisma.warmindoInventory.findMany({ where: { warmindoId: { in: outletIds } }, include: { warmindo: true } }),
+      (prisma as any).warmindoAttendance.findMany({ where: { warmindoId: { in: outletIds }, tanggal: { gte: today }, status: { in: ['absent','late'] } }, take: 10 }),
+      (prisma as any).warmindoMaintenance.findMany({ where: { warmindoId: { in: outletIds }, status: 'open' }, orderBy: { createdAt: 'desc' }, take: 10 }),
+    ]);
+
+    const lowStock = inventory.filter(i => i.stokSaatIni <= i.stokMinimum).map(i => ({ outlet: i.warmindo.namaOutlet, item: i.namaBahan, stok: i.stokSaatIni, minimum: i.stokMinimum, satuan: i.satuan }));
+    const profitEstimate = (sales._sum.grossProfit ?? 0) - (expenses._sum.jumlah ?? 0);
+    const problematicOutlet = outlets.find(o => maintenance.some((m: any) => m.warmindoId === o.id) || lowStock.some(i => i.outlet === o.namaOutlet));
+
+    return {
+      activeOutlets: outlets.filter(o => o.status === 'aktif').length,
+      dailyOmzet: sales._sum.totalOmzet ?? 0,
+      profitEstimate,
+      topProducts: topProductsRaw.map((p: any) => ({ productName: p.productName, qty: p._sum.qty ?? 0, total: p._sum.total ?? 0 })),
+      lowStock,
+      problematicOutlet: problematicOutlet ? { id: problematicOutlet.id, namaOutlet: problematicOutlet.namaOutlet, kodeOutlet: problematicOutlet.kodeOutlet } : null,
+      staffAttendanceIssues: attendanceIssues.length,
+      maintenanceIssues: maintenance.length,
+    };
+  });
 
   app.get('/:id', { preHandler: [app.authenticate] }, async (req: any) => {
     const id = Number(req.params.id);
@@ -145,4 +201,30 @@ export async function warmindoRoutes(app: FastifyInstance) {
       jumlahTransaksi: count,
     };
   });
+}
+
+function startToday() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
+async function warmindoScope(user: any) {
+  if (!user || ['admin_pusat','auditor','finance_admin'].includes(user.role)) return {};
+  if (['manager_warmindo','kasir_warmindo'].includes(user.role)) return user.warmindoId ? { id: user.warmindoId } : { id: -1 };
+  if (user.rtId) return { rtId: user.rtId };
+  if (user.kelurahanId) return { kelurahanId: user.kelurahanId };
+  if (user.rwId) {
+    const rts = await prisma.rT.findMany({ where: { rwId: user.rwId }, select: { id: true } });
+    return { rtId: { in: rts.map(rt => rt.id) } };
+  }
+  if (user.kecamatanId) {
+    const rts = await prisma.rT.findMany({ where: { rw: { kelurahan: { kecamatanId: user.kecamatanId } } }, select: { id: true } });
+    return { rtId: { in: rts.map(rt => rt.id) } };
+  }
+  if (user.kotaId) {
+    const rts = await prisma.rT.findMany({ where: { rw: { kelurahan: { kecamatan: { kotaId: user.kotaId } } } }, select: { id: true } });
+    return { rtId: { in: rts.map(rt => rt.id) } };
+  }
+  return { id: -1 };
 }
