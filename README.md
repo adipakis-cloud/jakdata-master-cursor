@@ -1,29 +1,26 @@
 # JAKDATA — Sistem Data Wilayah Jakarta
 
-**Stack:** React + Tailwind · Fastify TypeScript · PostgreSQL · Prisma · Docker
+**Stack:** React + Tailwind · Fastify TypeScript · PostgreSQL/Supabase · Prisma
 
 ---
 
 ## 🚀 Cara Menjalankan
 
 ### Prasyarat
-- Docker Desktop terinstall dan berjalan
-- Port 3000, 3001, 5432 tidak dipakai aplikasi lain
+- Node.js dan npm
+- PostgreSQL lokal atau Supabase
+- Port 3000 dan 3001 tidak dipakai aplikasi lain
 
 ### 1. Clone & setup environment
 
 ```bash
-cp .env.example .env
-# Edit .env jika perlu (opsional untuk development)
+cp .env.example backend/.env
+# Edit backend/.env sesuai database lokal atau Supabase
 ```
 
-### 2. Jalankan semua service
+### 2. Jalankan runtime lokal tanpa Docker
 
-```bash
-docker compose up --build
-```
-
-Pertama kali build membutuhkan ±3-5 menit.
+Ikuti panduan PowerShell lengkap di [`docs/local-runtime.md`](docs/local-runtime.md).
 
 ### 3. Akses aplikasi
 
@@ -41,10 +38,10 @@ Pertama kali build membutuhkan ±3-5 menit.
 |------|-------|----------|
 | **Admin Pusat** | admin@jakdata.id | admin123 |
 | **Petugas RT** | petugas.rt001@jakdata.id | petugas123 |
-| **Koordinator RW** | kordin.rw001@jakdata.id | petugas123 |
+| **Manager UMKM** | manager.umkm@jakdata.id | manager123 |
 
 **Admin Pusat** → Dashboard lengkap dengan semua modul
-**Petugas/Koordinator** → Tampilan lapangan yang sederhana
+**Petugas/Manager** → Tampilan operasional sesuai scope akun
 
 ---
 
@@ -63,16 +60,16 @@ Pertama kali build membutuhkan ±3-5 menit.
 
 ---
 
-## 🔧 Development (tanpa Docker)
+## 🔧 Development lokal
 
 ```bash
 # Backend
 cd backend
-cp .env.example .env  # isi DATABASE_URL
+cp ../.env.example .env  # isi DATABASE_URL, DIRECT_URL, JWT_SECRET
 npm install
 npx prisma generate
-npx prisma db push
-npx ts-node prisma/seed.ts
+npx prisma migrate dev
+npm run db:seed
 npm run dev
 
 # Frontend (terminal baru)
@@ -85,13 +82,14 @@ npm run dev
 
 ## ⚙️ Konfigurasi Produksi
 
-Edit `.env`:
+Edit `backend/.env`:
 
 ```env
+DATABASE_URL=postgresql://...
+DIRECT_URL=postgresql://...
 JWT_SECRET=string_random_panjang_minimal_32_karakter
-ANTHROPIC_API_KEY=sk-ant-...   # untuk fitur AI
-FONNTE_TOKEN=...               # untuk WhatsApp notifikasi
-POSTGRES_PASSWORD=password_kuat
+SUPABASE_URL=https://...
+SUPABASE_ANON_KEY=...
 ```
 
 ---
@@ -100,12 +98,14 @@ POSTGRES_PASSWORD=password_kuat
 
 ```
 jakdata/
-├── docker-compose.yml
 ├── .env.example
-├── prisma/
-│   ├── schema.prisma          # Database schema (25+ model)
-│   └── seed.ts                # Data awal
+├── docs/
+│   ├── local-runtime.md       # Workflow lokal tanpa Docker
+│   └── database-map.md        # Peta tabel dan relasi database
 ├── backend/
+│   ├── prisma/
+│   │   ├── schema.prisma      # Database schema authoritative
+│   │   └── seed.ts            # Data awal lokal idempotent
 │   └── src/
 │       ├── main.ts            # Fastify server
 │       ├── config/prisma.ts
