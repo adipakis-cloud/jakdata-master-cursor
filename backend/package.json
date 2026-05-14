@@ -2,6 +2,9 @@
   "name": "jakdata-backend",
   "version": "3.0.0",
   "description": "JAKDATA Backend API",
+  "prisma": {
+    "seed": "npx ts-node --transpile-only prisma/seed.ts"
+  },
   "scripts": {
     "dev": "npx ts-node --transpile-only src/main.ts",
     "db:push": "prisma db push",
