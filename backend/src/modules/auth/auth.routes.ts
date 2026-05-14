@@ -35,13 +35,13 @@ export async function authRoutes(app: FastifyInstance) {
     clearLoginAttempts(ip, email);
     await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date(), loginAttempts: 0, lockedUntil: null } });
 
-    const token = app.jwt.sign({ sub: user.id, email: user.email, role: user.role, nama: user.nama, kecamatanId: user.kecamatanId, kelurahanId: user.kelurahanId, rwId: user.rwId, rtId: user.rtId, warmindoId: user.warmindoId }, { expiresIn: '7d' });
+    const token = app.jwt.sign({ sub: user.id, email: user.email, role: user.role, nama: user.nama, kotaId: user.kotaId, kecamatanId: user.kecamatanId, kelurahanId: user.kelurahanId, rwId: user.rwId, rtId: user.rtId, warmindoId: user.warmindoId }, { expiresIn: '7d' });
 
     await writeAuditLog({ userId: user.id, action: 'login.success', ipAddress: ip });
 
     return {
       token,
-      user: { id: user.id, nama: user.nama, email: user.email, role: user.role, noHp: user.noHp, kecamatanId: user.kecamatanId, kelurahanId: user.kelurahanId, rwId: user.rwId, rtId: user.rtId, warmindoId: user.warmindoId },
+      user: { id: user.id, nama: user.nama, email: user.email, role: user.role, noHp: user.noHp, kotaId: user.kotaId, kecamatanId: user.kecamatanId, kelurahanId: user.kelurahanId, rwId: user.rwId, rtId: user.rtId, warmindoId: user.warmindoId },
     };
   });
 
@@ -51,7 +51,7 @@ export async function authRoutes(app: FastifyInstance) {
     const payload = req.user as any;
     return prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id:true, uuid:true, nama:true, email:true, role:true, noHp:true, aktif:true, lastLoginAt:true, kecamatanId:true, kelurahanId:true, rwId:true, rtId:true, warmindoId:true, kecamatan:{select:{id:true,nama:true}}, kelurahan:{select:{id:true,nama:true}}, rw:{select:{id:true,nomor:true}}, rt:{select:{id:true,nomor:true}} },
+      select: { id:true, uuid:true, nama:true, email:true, role:true, noHp:true, aktif:true, lastLoginAt:true, kotaId:true, kecamatanId:true, kelurahanId:true, rwId:true, rtId:true, warmindoId:true, kota:{select:{id:true,nama:true}}, kecamatan:{select:{id:true,nama:true}}, kelurahan:{select:{id:true,nama:true}}, rw:{select:{id:true,nomor:true}}, rt:{select:{id:true,nomor:true}} },
     });
   });
 }

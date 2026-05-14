@@ -10,6 +10,9 @@ datasource db {
 
 enum UserRole {
   admin_pusat
+  admin_kota
+  admin_kecamatan
+  admin_kelurahan
   koordinator_kecamatan
   koordinator_kelurahan
   koordinator_rw
@@ -95,6 +98,7 @@ model User {
   lastLoginAt   DateTime? @map("last_login_at")
   loginAttempts Int       @default(0) @map("login_attempts")
   lockedUntil   DateTime? @map("locked_until")
+  kotaId        Int?      @map("kota_id")
   kecamatanId   Int?      @map("kecamatan_id")
   kelurahanId   Int?      @map("kelurahan_id")
   rwId          Int?      @map("rw_id")
@@ -103,6 +107,7 @@ model User {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 
+  kota                   Kota?              @relation(fields: [kotaId], references: [id], onDelete: SetNull)
   kecamatan              Kecamatan?         @relation(fields: [kecamatanId], references: [id], onDelete: SetNull)
   kelurahan              Kelurahan?         @relation(fields: [kelurahanId], references: [id], onDelete: SetNull)
   rw                     RW?                @relation(fields: [rwId], references: [id], onDelete: SetNull)
@@ -127,6 +132,7 @@ model User {
 
   @@index([email])
   @@index([role])
+  @@index([kotaId])
   @@index([kecamatanId])
   @@index([kelurahanId])
   @@index([rwId])
@@ -192,6 +198,7 @@ model Kota {
   createdAt  DateTime    @default(now()) @map("created_at")
   provinsi   Provinsi    @relation(fields: [provinsiId], references: [id])
   kecamatan  Kecamatan[]
+  users      User[]
 
   @@unique([provinsiId, nama])
   @@index([provinsiId])
