@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { assertWarmindoAccess } from '../security/scope';
 
 export async function warmindoRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: [app.authenticate] }, async (req: any) => {
@@ -66,6 +67,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.get('/:id', { preHandler: [app.authenticate] }, async (req: any) => {
     const id = Number(req.params.id);
+    await assertWarmindoAccess(req.user, id);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -95,6 +97,12 @@ export async function warmindoRoutes(app: FastifyInstance) {
     };
   });
 
+  app.get('/:id/employees', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+    const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
+    return (prisma as any).warmindoEmployee.findMany({ where: { warmindoId: id, aktif: true }, orderBy: { nama: 'asc' } });
+  });
+
   app.post('/', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const b = req.body;
     const count = await prisma.warmindoOutlet.count();
@@ -115,6 +123,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.post('/:id/transaksi', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
     const b = req.body;
     const omzet = Number(b.totalOmzet) || 0;
     const hpp = Number(b.totalHpp) || 0;
@@ -134,6 +143,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.post('/:id/pengeluaran', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
     const b = req.body;
     const p = await prisma.warmindoPengeluaran.create({
       data: {
@@ -146,8 +156,71 @@ export async function warmindoRoutes(app: FastifyInstance) {
     return reply.code(201).send(p);
   });
 
+  app.post('/:id/procurement', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+    const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
+    const b = req.body as any;
+    const procurement = await (prisma as any).warmindoProcurement.create({
+      data: {
+        kodeProcurement: `FIELD-PROC-${id}-${Date.now()}`,
+        warmindoId: id,
+        tanggal: new Date(),
+        status: 'received',
+        totalAmount: Number(b.totalAmount) || 0,
+        paymentStatus: b.paymentStatus ?? 'paid',
+        catatan: b.catatan,
+      },
+    });
+    return reply.code(201).send(procurement);
+  });
+
+  app.post('/:id/stock-movement', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+    const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
+    const b = req.body as any;
+    const movement = await (prisma as any).warmindoStockMovement.create({
+      data: {
+        warmindoId: id,
+        inventoryId: b.inventoryId ? Number(b.inventoryId) : null,
+        namaBahan: b.namaBahan,
+        movementType: b.movementType,
+        qty: Number(b.qty),
+        satuan: b.satuan ?? 'pcs',
+        reason: b.reason ?? 'field_update',
+        referenceType: 'field',
+      },
+    });
+    if (b.inventoryId) {
+      await prisma.warmindoInventory.update({
+        where: { id: Number(b.inventoryId) },
+        data: { stokSaatIni: b.movementType === 'in' ? { increment: Number(b.qty) } : { decrement: Number(b.qty) } },
+      });
+    }
+    return reply.code(201).send(movement);
+  });
+
+  app.post('/:id/maintenance', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+    const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
+    const b = req.body as any;
+    const maintenance = await (prisma as any).warmindoMaintenance.create({
+      data: {
+        kodeMaintenance: `FIELD-MNT-${id}-${Date.now()}`,
+        warmindoId: id,
+        tanggal: new Date(),
+        issue: b.issue,
+        severity: b.severity ?? 'medium',
+        status: 'open',
+        cost: Number(b.cost ?? 0),
+        notes: b.notes,
+      },
+    });
+    return reply.code(201).send(maintenance);
+  });
+
   app.post('/:id/inventory', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    try { await assertWarmindoAccess(req.user, id); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
     const b = req.body;
     const inv = await prisma.warmindoInventory.create({
       data: {
@@ -164,6 +237,8 @@ export async function warmindoRoutes(app: FastifyInstance) {
   });
 
   app.put('/:id/inventory/:invId', { preHandler: [app.authenticate] }, async (req: any) => {
+    const id = Number(req.params.id);
+    await assertWarmindoAccess(req.user, id);
     const invId = Number(req.params.invId);
     const b = req.body;
     return prisma.warmindoInventory.update({
@@ -174,6 +249,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
 
   app.get('/:id/keuangan', { preHandler: [app.authenticate] }, async (req: any) => {
     const id = Number(req.params.id);
+    await assertWarmindoAccess(req.user, id);
     const now = new Date();
     const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 

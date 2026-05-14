@@ -16,6 +16,7 @@ import { bantuanRoutes } from './modules/bantuan/bantuan.routes';
 import { aiRoutes } from './modules/ai/ai.routes';
 import { tpsRoutes, officialRoutes, usersRoutes } from './modules/tps/tps.routes';
 import { securityPlugin } from './modules/security/security';
+import { fieldRoutes } from './modules/field/field.routes';
 
 declare module 'fastify' {
   interface FastifyInstance { authenticate: (req: any, reply: any) => Promise<void>; }
@@ -47,6 +48,7 @@ async function bootstrap() {
   await app.register(warmindoRoutes,  { prefix: '/api/warmindo' });
   await app.register(bantuanRoutes,   { prefix: '/api/bantuan' });
   await app.register(aiRoutes,        { prefix: '/api/ai' });
+  await app.register(fieldRoutes,     { prefix: '/api/field' });
   await app.register(tpsRoutes,       { prefix: '/api/tps' });
   await app.register(officialRoutes,  { prefix: '/api/official' });
   await app.register(usersRoutes,     { prefix: '/api/users' });
