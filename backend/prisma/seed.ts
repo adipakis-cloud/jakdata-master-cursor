@@ -545,6 +545,281 @@ async function seedWarmindo(wilayah: WilayahSeed[]) {
   return outlets;
 }
 
+async function upsertByUnique(modelName: string, uniqueField: string, data: any) {
+  const model = (prisma as any)[modelName];
+  return model.upsert({
+    where: { [uniqueField]: data[uniqueField] },
+    update: data,
+    create: data,
+  });
+}
+
+async function seedWarmindoFieldOps(outlets: { id: number; kodeOutlet: string; namaOutlet: string }[]) {
+  const supplierSpecs = [
+    { kodeSupplier: 'SUP-SEED-001', nama: 'Pasar Induk Beras Cipinang', kategori: 'sembako', noHp: '081900000001', alamat: 'Cipinang', rating: 4.6, aktif: true },
+    { kodeSupplier: 'SUP-SEED-002', nama: 'Agen Telur Jaya', kategori: 'protein', noHp: '081900000002', alamat: 'Cengkareng', rating: 4.2, aktif: true },
+    { kodeSupplier: 'SUP-SEED-003', nama: 'Distributor Mie Nusantara', kategori: 'mie', noHp: '081900000003', alamat: 'Tambora', rating: 4.4, aktif: true },
+    { kodeSupplier: 'SUP-SEED-004', nama: 'Toko Plastik dan Kemasan Amanah', kategori: 'kemasan', noHp: '081900000004', alamat: 'Tebet', rating: 3.8, aktif: true },
+  ];
+  const suppliers = [];
+  for (const supplier of supplierSpecs) {
+    suppliers.push(await upsertByUnique('warmindoSupplier', 'kodeSupplier', supplier));
+  }
+
+  const productBase = [
+    ['MIE-GORENG-TELUR', 'Mie Goreng Telur', 'makanan', 15000, 9800],
+    ['MIE-REBUS-SAYUR', 'Mie Rebus Sayur', 'makanan', 14000, 9200],
+    ['NASI-TELUR', 'Nasi Telur Sambal', 'makanan', 12000, 7600],
+    ['KOPI-HITAM', 'Kopi Hitam', 'minuman', 5000, 1800],
+    ['ES-TEH', 'Es Teh Manis', 'minuman', 5000, 1500],
+    ['ROTI-BAKAR', 'Roti Bakar Coklat', 'snack', 11000, 6200],
+  ] as const;
+
+  for (let outletIndex = 0; outletIndex < outlets.length; outletIndex++) {
+    const outlet = outlets[outletIndex];
+    const products = [];
+    for (const [sku, nama, kategori, hargaJual, hpp] of productBase) {
+      products.push(await upsertByUnique('warmindoProduct', 'kodeProduct', {
+        kodeProduct: `${outlet.kodeOutlet}-${sku}`,
+        warmindoId: outlet.id,
+        nama,
+        kategori,
+        hargaJual,
+        hpp,
+        aktif: true,
+        isBestSeller: sku === 'MIE-GORENG-TELUR' || sku === 'ES-TEH',
+      }));
+    }
+
+    const procurement = await upsertByUnique('warmindoProcurement', 'kodeProcurement', {
+      kodeProcurement: `PROC-${outlet.kodeOutlet}-001`,
+      warmindoId: outlet.id,
+      supplierId: suppliers[outletIndex % suppliers.length].id,
+      tanggal: startOfDay(-6, 8),
+      status: 'received',
+      totalAmount: outletIndex === 3 ? 4200000 : 2600000,
+      paymentStatus: outletIndex === 1 ? 'partial' : 'paid',
+      catatan: `seed=procurement; outlet=${outlet.kodeOutlet}`,
+    });
+
+    for (const item of [
+      ['Mie Instan Karton', 12, 'karton', 96000],
+      ['Telur Ayam', 20, 'kg', 28000],
+      ['Beras', 40, 'kg', 13500],
+      ['Minuman Sachet', 12, 'pak', 45000],
+    ] as const) {
+      const [inventoryName, qty, satuan, unitCost] = item;
+      const existingItem = await (prisma as any).warmindoProcurementItem.findFirst({
+        where: { procurementId: procurement.id, inventoryName },
+      });
+      const itemData = { procurementId: procurement.id, inventoryName, qty, satuan, unitCost, totalCost: qty * unitCost };
+      if (existingItem) await (prisma as any).warmindoProcurementItem.update({ where: { id: existingItem.id }, data: itemData });
+      else await (prisma as any).warmindoProcurementItem.create({ data: itemData });
+    }
+
+    const transactions = await prisma.warmindoTransaksi.findMany({
+      where: { warmindoId: outlet.id, tanggal: { gte: startOfDay(-6, 0) } },
+      orderBy: { tanggal: 'asc' },
+    });
+    for (let txIndex = 0; txIndex < transactions.length; txIndex++) {
+      const trx = transactions[txIndex];
+      const qtyBase = Math.max(1, Math.round(trx.jumlahItem / products.length));
+      for (let pIndex = 0; pIndex < products.length; pIndex++) {
+        const product = products[pIndex];
+        const qty = qtyBase + ((txIndex + pIndex) % 3);
+        const existingLine = await (prisma as any).warmindoSaleLineItem.findFirst({
+          where: { transaksiId: trx.id, productName: product.nama },
+        });
+        const lineData = {
+          transaksiId: trx.id,
+          warmindoId: outlet.id,
+          productId: product.id,
+          productName: product.nama,
+          qty,
+          unitPrice: product.hargaJual,
+          unitHpp: product.hpp,
+          total: qty * product.hargaJual,
+          grossProfit: qty * (product.hargaJual - product.hpp),
+        };
+        if (existingLine) await (prisma as any).warmindoSaleLineItem.update({ where: { id: existingLine.id }, data: lineData });
+        else await (prisma as any).warmindoSaleLineItem.create({ data: lineData });
+      }
+
+      const existingCashIn = await (prisma as any).warmindoCashflowLedger.findFirst({
+        where: { warmindoId: outlet.id, referenceType: 'warmindo_transaksi', referenceId: trx.id },
+      });
+      const cashInData = {
+        warmindoId: outlet.id,
+        tanggal: trx.tanggal,
+        direction: 'in',
+        kategori: 'sales',
+        amount: trx.totalOmzet,
+        description: `Penjualan harian ${outlet.namaOutlet}`,
+        referenceType: 'warmindo_transaksi',
+        referenceId: trx.id,
+      };
+      if (existingCashIn) await (prisma as any).warmindoCashflowLedger.update({ where: { id: existingCashIn.id }, data: cashInData });
+      else await (prisma as any).warmindoCashflowLedger.create({ data: cashInData });
+    }
+
+    const expenses = await prisma.warmindoPengeluaran.findMany({ where: { warmindoId: outlet.id } });
+    for (const expense of expenses) {
+      const existingCashOut = await (prisma as any).warmindoCashflowLedger.findFirst({
+        where: { warmindoId: outlet.id, referenceType: 'warmindo_pengeluaran', referenceId: expense.id },
+      });
+      const cashOutData = {
+        warmindoId: outlet.id,
+        tanggal: expense.tanggal,
+        direction: 'out',
+        kategori: expense.kategori,
+        amount: expense.jumlah,
+        description: expense.deskripsi,
+        referenceType: 'warmindo_pengeluaran',
+        referenceId: expense.id,
+      };
+      if (existingCashOut) await (prisma as any).warmindoCashflowLedger.update({ where: { id: existingCashOut.id }, data: cashOutData });
+      else await (prisma as any).warmindoCashflowLedger.create({ data: cashOutData });
+    }
+
+    for (const movement of [
+      ['Mie Instan Karton', 'in', 12, 'karton', 'procurement'],
+      ['Telur Ayam', 'in', 20, 'kg', 'procurement'],
+      ['Mie Instan Karton', 'out', outletIndex === 0 ? 10 : 4, 'karton', 'sales_usage'],
+      ['Gas LPG 3kg', 'out', outletIndex === 3 ? 4 : 1, 'tabung', 'sales_usage'],
+    ] as const) {
+      const [namaBahan, movementType, qty, satuan, reason] = movement;
+      const movementDate = startOfDay(-5 + outletIndex, 10);
+      const existingMovement = await (prisma as any).warmindoStockMovement.findFirst({
+        where: { warmindoId: outlet.id, namaBahan, movementType, tanggal: movementDate },
+      });
+      const movementData = { warmindoId: outlet.id, namaBahan, movementType, qty, satuan, reason, referenceType: 'seed', referenceId: procurement.id, tanggal: movementDate };
+      if (existingMovement) await (prisma as any).warmindoStockMovement.update({ where: { id: existingMovement.id }, data: movementData });
+      else await (prisma as any).warmindoStockMovement.create({ data: movementData });
+    }
+
+    for (let day = -6; day <= 0; day++) {
+      const tanggal = startOfDay(day, 0);
+      const dayStart = startOfDay(day, 0);
+      const nextDay = startOfDay(day + 1, 0);
+      const [sales, expenseAgg] = await Promise.all([
+        prisma.warmindoTransaksi.aggregate({ where: { warmindoId: outlet.id, tanggal: { gte: dayStart, lt: nextDay } }, _sum: { totalOmzet: true, grossProfit: true } }),
+        prisma.warmindoPengeluaran.aggregate({ where: { warmindoId: outlet.id, tanggal: { gte: dayStart, lt: nextDay } }, _sum: { jumlah: true } }),
+      ]);
+      const totalSales = sales._sum.totalOmzet ?? 0;
+      const totalExpenses = expenseAgg._sum.jumlah ?? 0;
+      const variance = outletIndex === 1 && day === 0 ? -75000 : outletIndex === 3 && day === -1 ? -125000 : 0;
+      await upsertByUnique('warmindoDailyClosing', 'kodeClosing', {
+        kodeClosing: `CLOSE-${outlet.kodeOutlet}-${tanggal.toISOString().slice(0, 10)}`,
+        warmindoId: outlet.id,
+        tanggal,
+        totalSales,
+        totalExpenses,
+        cashExpected: totalSales - totalExpenses,
+        cashActual: totalSales - totalExpenses + variance,
+        variance,
+        status: variance === 0 ? 'closed' : 'variance',
+        closedBy: null,
+        notes: variance === 0 ? 'Seed daily closing normal' : 'Seed daily closing variance perlu audit kasir',
+      });
+    }
+
+    const employeeNames = ['Aldi Saputra', 'Mira Lestari', 'Tono Wijaya'];
+    const employees = [];
+    for (let eIndex = 0; eIndex < employeeNames.length; eIndex++) {
+      employees.push(await upsertByUnique('warmindoEmployee', 'kodeEmployee', {
+        kodeEmployee: `EMP-${outlet.kodeOutlet}-${pad(eIndex + 1, 2)}`,
+        warmindoId: outlet.id,
+        nama: `${employeeNames[eIndex]} ${outletIndex + 1}`,
+        role: eIndex === 0 ? 'manager_shift' : eIndex === 1 ? 'kasir' : 'cook',
+        noHp: `0855${pad(outletIndex * 10 + eIndex + 1, 8)}`,
+        gajiPokok: eIndex === 0 ? 3200000 : 2600000,
+        aktif: true,
+        joinedAt: startOfDay(-150 + eIndex, 9),
+      }));
+    }
+
+    for (let day = -6; day <= 0; day++) {
+      for (let eIndex = 0; eIndex < employees.length; eIndex++) {
+        const employee = employees[eIndex];
+        const tanggal = startOfDay(day, 0);
+        const isProblem = (outletIndex === 3 && eIndex === 1 && day === -1) || (outletIndex === 1 && eIndex === 2 && day === 0);
+        const shift = await upsertByUnique('warmindoShift', 'kodeShift', {
+          kodeShift: `SHIFT-${outlet.kodeOutlet}-${employee.id}-${tanggal.toISOString().slice(0, 10)}`,
+          warmindoId: outlet.id,
+          employeeId: employee.id,
+          tanggal,
+          shiftName: eIndex === 0 ? 'pagi' : 'siang',
+          startTime: startOfDay(day, eIndex === 0 ? 7 : 13),
+          endTime: startOfDay(day, eIndex === 0 ? 13 : 21),
+          status: isProblem ? 'missed' : 'completed',
+        });
+        await upsertByUnique('warmindoAttendance', 'kodeAttendance', {
+          kodeAttendance: `ATT-${outlet.kodeOutlet}-${employee.id}-${tanggal.toISOString().slice(0, 10)}`,
+          warmindoId: outlet.id,
+          employeeId: employee.id,
+          shiftId: shift.id,
+          tanggal,
+          checkIn: isProblem ? null : startOfDay(day, eIndex === 0 ? 7 : 13),
+          checkOut: isProblem ? null : startOfDay(day, eIndex === 0 ? 13 : 21),
+          status: isProblem ? (outletIndex === 3 ? 'absent' : 'late') : 'present',
+          lateMinutes: isProblem && outletIndex === 1 ? 95 : 0,
+          notes: isProblem ? 'Seed attendance issue untuk validasi field readiness' : 'Seed attendance normal',
+        });
+      }
+    }
+
+    for (const employee of employees) {
+      await upsertByUnique('warmindoPayroll', 'kodePayroll', {
+        kodePayroll: `PAY-${outlet.kodeOutlet}-${employee.id}-2026-05`,
+        warmindoId: outlet.id,
+        employeeId: employee.id,
+        periode: '2026-05',
+        baseSalary: employee.gajiPokok,
+        bonus: outletIndex === 2 ? 150000 : 0,
+        deduction: outletIndex === 3 ? 75000 : 0,
+        netSalary: employee.gajiPokok + (outletIndex === 2 ? 150000 : 0) - (outletIndex === 3 ? 75000 : 0),
+        status: outletIndex === 1 ? 'pending' : 'paid',
+        paidAt: outletIndex === 1 ? null : startOfDay(-2, 17),
+      });
+    }
+
+    const assets = [];
+    for (const asset of [
+      ['KOMPOR', 'Kompor dua tungku', 'dapur', outletIndex === 1 ? 'rusak_ringan' : 'baik', 1200000],
+      ['FREEZER', 'Freezer minuman', 'pendingin', outletIndex === 1 ? 'rusak' : 'baik', 3500000],
+      ['MEJA', 'Meja pelanggan', 'fasilitas', outletIndex === 3 ? 'butuh_perbaikan' : 'baik', 900000],
+    ] as const) {
+      const [code, namaAsset, kategori, kondisi, nilaiBeli] = asset;
+      assets.push(await upsertByUnique('warmindoAsset', 'kodeAsset', {
+        kodeAsset: `AST-${outlet.kodeOutlet}-${code}`,
+        warmindoId: outlet.id,
+        namaAsset,
+        kategori,
+        kondisi,
+        nilaiBeli,
+        tanggalBeli: startOfDay(-120, 0),
+        aktif: true,
+      }));
+    }
+
+    if (outletIndex === 1 || outletIndex === 3) {
+      const asset = assets[outletIndex === 1 ? 1 : 2];
+      await upsertByUnique('warmindoMaintenance', 'kodeMaintenance', {
+        kodeMaintenance: `MNT-${outlet.kodeOutlet}-001`,
+        warmindoId: outlet.id,
+        assetId: asset.id,
+        tanggal: startOfDay(0, 12),
+        issue: outletIndex === 1 ? 'Freezer tidak stabil, biaya listrik naik dan produk minuman rusak' : 'Meja dan area duduk overload saat jam makan',
+        severity: outletIndex === 1 ? 'high' : 'medium',
+        status: 'open',
+        cost: outletIndex === 1 ? 2400000 : 450000,
+        resolvedAt: null,
+        notes: 'Seed maintenance case for operational dashboard',
+      });
+    }
+  }
+}
+
 async function seedRoleUsers(wilayah: WilayahSeed[], outlets: { id: number }[]) {
   const jakartaBarat = wilayah[0];
   const admin = await upsertUser({ email: 'admin@jakdata.id', nama: 'Administrator JAKDATA', role: 'admin_pusat' });
@@ -646,6 +921,64 @@ async function seedAidAndFairness(families: FamilySeed[], createdBy: number) {
       },
     });
   }
+
+  const repeatedCount = repeated.length;
+  const uncoveredCount = neverReached.length;
+  const totalHighRisk = families.filter((family) => family.score >= 80).length;
+  const totalRecipients = await prisma.bantuanPenerima.count();
+  const rawFairnessScore = Math.round(100 - repeatedCount * 7 - uncoveredCount * 5 - Math.max(0, totalHighRisk - regular.length) * 0.35);
+  const fairnessScore = Math.max(42, Math.min(100, rawFairnessScore));
+
+  await upsertByUnique('bantuanFairnessSnapshot', 'kodeSnapshot', {
+    kodeSnapshot: 'FAIR-SNAPSHOT-DKI-2026-05',
+    wilayahLevel: 'provinsi',
+    wilayahId: null,
+    fairnessScore,
+    repeatedRecipients: repeatedCount,
+    uncoveredHighRisk: uncoveredCount,
+    totalRecipients,
+    totalHighRisk,
+    notes: 'Seed fairness score menggabungkan penerima berulang, keluarga risiko tinggi belum tersentuh, dan ketimpangan RT/RW.',
+    metrics: {
+      repeatedFamilyCodes: repeated.map((family) => family.noKk),
+      uncoveredFamilyCodes: neverReached.map((family) => family.noKk),
+      unevenAidByTerritory: true,
+      sources: ['APBD Sosial', 'Dana Sosial', 'Program Kesehatan', 'Ekonomi Produktif'],
+    },
+    calculatedAt: startOfDay(0, 5),
+  });
+
+  let anomalyIndex = 1;
+  for (const family of repeated) {
+    await upsertByUnique('bantuanAnomaly', 'kodeAnomaly', {
+      kodeAnomaly: `AID-ANOM-REPEAT-${pad(anomalyIndex, 3)}`,
+      tipe: 'repeated_recipient',
+      severity: 'high',
+      keluargaId: family.id,
+      bantuanId: programs[0].id,
+      rtId: family.rtId,
+      title: 'Penerima bantuan berulang lintas program',
+      description: `${family.namaKepala} menerima lebih dari dua bantuan dalam periode pendek.`,
+      status: 'open',
+      metadata: { noKk: family.noKk, score: family.score },
+    });
+    anomalyIndex++;
+  }
+  for (const family of neverReached) {
+    await upsertByUnique('bantuanAnomaly', 'kodeAnomaly', {
+      kodeAnomaly: `AID-ANOM-UNCOVERED-${pad(anomalyIndex, 3)}`,
+      tipe: 'uncovered_high_risk',
+      severity: 'critical',
+      keluargaId: family.id,
+      bantuanId: null,
+      rtId: family.rtId,
+      title: 'Keluarga risiko tinggi belum menerima bantuan',
+      description: `${family.namaKepala} skor ${family.score} belum memiliki catatan penerimaan bantuan.`,
+      status: 'open',
+      metadata: { noKk: family.noKk, score: family.score },
+    });
+    anomalyIndex++;
+  }
 }
 
 async function seedReports(wilayah: WilayahSeed[], createdBy: number) {
@@ -717,6 +1050,109 @@ async function seedReports(wilayah: WilayahSeed[], createdBy: number) {
           messageText: `Seed governance timeline: status=${status}; responseArea=${area.kelurahan.risk === 'low' ? 'active' : 'passive'}`,
           isInternal: true,
         },
+      });
+    }
+  }
+}
+
+async function seedTerritorialIntelligence(wilayah: WilayahSeed[]) {
+  for (let i = 0; i < wilayah.length; i++) {
+    const area = wilayah[i];
+    const risk = area.kelurahan.risk;
+    const label = `${area.kelurahan.nama}, ${area.kecamatan.nama}`;
+    const isPassive = risk === 'high' && i !== 0;
+    const vulnerableFamilies = risk === 'high' ? 28 + i * 3 : risk === 'medium' ? 13 : 5;
+    const economicStressScore = risk === 'high' ? 86 + i : risk === 'medium' ? 62 : 28;
+    const foodRiskScore = risk === 'high' ? 82 + i : risk === 'medium' ? 55 : 22;
+
+    await upsertByUnique('territorialSocialProfile', 'kodeProfile', {
+      kodeProfile: `TSP-KEL-${area.kelurahan.id}`,
+      wilayahLevel: 'kelurahan',
+      wilayahId: area.kelurahan.id,
+      label,
+      densityLevel: risk === 'high' ? 'dense_poor_area' : risk === 'medium' ? 'industrial_buffer' : 'active_kelurahan',
+      povertyRisk: risk,
+      activeStatus: isPassive ? 'passive' : 'active',
+      vulnerableFamilies,
+      elderlyCount: risk === 'high' ? 18 : 7,
+      childrenCount: risk === 'high' ? 61 : risk === 'medium' ? 34 : 18,
+      disabilityCount: risk === 'high' ? 9 : 2,
+      notes: `seed=territorial; floodProne=${i < 2}; economicStress=${economicStressScore}`,
+    });
+
+    await upsertByUnique('territorialEconomicSnapshot', 'kodeSnapshot', {
+      kodeSnapshot: `TES-KEL-${area.kelurahan.id}-2026-05`,
+      wilayahLevel: 'kelurahan',
+      wilayahId: area.kelurahan.id,
+      unemploymentRate: risk === 'high' ? 0.22 : risk === 'medium' ? 0.12 : 0.04,
+      avgIncome: risk === 'high' ? 1450000 : risk === 'medium' ? 3300000 : 7200000,
+      umkmCount: risk === 'high' ? 12 : risk === 'medium' ? 9 : 18,
+      informalWorkerRate: risk === 'high' ? 0.68 : risk === 'medium' ? 0.39 : 0.18,
+      economicStressScore,
+      capturedAt: startOfDay(0, 5),
+    });
+
+    await upsertByUnique('foodSecuritySnapshot', 'kodeSnapshot', {
+      kodeSnapshot: `FSS-KEL-${area.kelurahan.id}-2026-05`,
+      wilayahLevel: 'kelurahan',
+      wilayahId: area.kelurahan.id,
+      foodRiskScore,
+      mealGapFamilies: risk === 'high' ? 14 + i : risk === 'medium' ? 5 : 1,
+      staplePriceIndex: risk === 'high' ? 1.18 : risk === 'medium' ? 1.07 : 0.98,
+      notes: risk === 'high' ? 'Harga pangan naik dan keluarga rentan melewatkan makan.' : 'Stabil.',
+      capturedAt: startOfDay(0, 5),
+    });
+
+    await upsertByUnique('territorialStressSignal', 'kodeSignal', {
+      kodeSignal: `TSS-KEL-${area.kelurahan.id}-ECON`,
+      wilayahLevel: 'kelurahan',
+      wilayahId: area.kelurahan.id,
+      signalType: risk === 'high' ? 'poverty_food_governance' : risk === 'medium' ? 'economic_stress' : 'active_response',
+      severity: risk === 'high' ? 'critical' : risk === 'medium' ? 'high' : 'low',
+      score: risk === 'high' ? 91 : risk === 'medium' ? 63 : 24,
+      description: risk === 'high' ? 'Wilayah padat miskin dengan laporan critical dan bantuan tidak merata.' : risk === 'medium' ? 'Tekanan ekonomi UMKM dan pekerja informal.' : 'Wilayah aktif, respons cepat.',
+      status: risk === 'low' ? 'monitoring' : 'open',
+    });
+
+    if (i < 2) {
+      const event = await upsertByUnique('disasterEvent', 'kodeEvent', {
+        kodeEvent: `DST-FLOOD-${area.kelurahan.id}-2026-05`,
+        wilayahLevel: 'kelurahan',
+        wilayahId: area.kelurahan.id,
+        eventType: 'flood',
+        severity: i === 0 ? 'critical' : 'high',
+        occurredAt: startOfDay(-1, 4),
+        affectedFamilies: i === 0 ? 32 : 21,
+        status: 'active',
+        description: `Seed flood-prone event for ${label}.`,
+      });
+
+      await upsertByUnique('governmentResponse', 'kodeResponse', {
+        kodeResponse: `GOV-RESP-${area.kelurahan.id}-FLOOD`,
+        eventId: event.id,
+        laporanId: null,
+        wilayahLevel: 'kelurahan',
+        wilayahId: area.kelurahan.id,
+        responseType: 'field_visit_and_logistics',
+        status: i === 0 ? 'delayed' : 'in_progress',
+        responseDelayHours: i === 0 ? 18 : 6,
+        startedAt: startOfDay(-1, i === 0 ? 22 : 10),
+        completedAt: null,
+        notes: i === 0 ? 'Response delay due to passive coordination.' : 'Response active with kelurahan coordination.',
+      });
+    } else {
+      await upsertByUnique('governmentResponse', 'kodeResponse', {
+        kodeResponse: `GOV-RESP-${area.kelurahan.id}-SOCIAL`,
+        eventId: null,
+        laporanId: null,
+        wilayahLevel: 'kelurahan',
+        wilayahId: area.kelurahan.id,
+        responseType: 'social_monitoring',
+        status: risk === 'low' ? 'completed' : 'in_progress',
+        responseDelayHours: risk === 'low' ? 2 : 9,
+        startedAt: startOfDay(-2, 9),
+        completedAt: risk === 'low' ? startOfDay(-2, 11) : null,
+        notes: risk === 'low' ? 'Active kelurahan resolved issue quickly.' : 'Economic stress case in progress.',
       });
     }
   }
@@ -833,6 +1269,178 @@ async function seedAiFoundation(wilayah: WilayahSeed[], createdBy: number) {
   );
 }
 
+async function seedAiGovernanceMemory(wilayah: WilayahSeed[], createdBy: number) {
+  const povertyObservation = await upsertByUnique('aIObservation', 'kodeObservation', {
+    kodeObservation: 'AIO-POVERTY-KAPUK-001',
+    domain: 'poverty',
+    title: 'Risiko kemiskinan Kapuk meningkat',
+    summary: 'Kombinasi pengangguran, kontrakan padat, BPJS PBI, dan food risk tinggi.',
+    severity: 'critical',
+    evidence: { wilayah: 'Kapuk', signals: ['unemployment', 'food_risk', 'housing_density'] },
+    wilayahLevel: 'kelurahan',
+    wilayahId: wilayah[0].kelurahan.id,
+    status: 'open',
+  });
+
+  const aidObservation = await upsertByUnique('aIObservation', 'kodeObservation', {
+    kodeObservation: 'AIO-AID-FAIRNESS-001',
+    domain: 'aid_fairness',
+    title: 'Distribusi bantuan tidak merata',
+    summary: 'Penerima berulang ditemukan bersamaan dengan keluarga skor tinggi yang belum menerima bantuan.',
+    severity: 'critical',
+    evidence: { repeatedRecipients: true, uncoveredHighRisk: true },
+    wilayahLevel: 'provinsi',
+    wilayahId: null,
+    status: 'open',
+  });
+
+  const warmindoObservation = await upsertByUnique('aIObservation', 'kodeObservation', {
+    kodeObservation: 'AIO-WRM-ANOMALY-001',
+    domain: 'warmindo',
+    title: 'Anomali operasional Warmindo',
+    summary: 'Low stock Kapuk, high expense Angke, dan overload Pondok Bambu perlu intervensi.',
+    severity: 'high',
+    evidence: { lowStock: true, highExpense: true, overload: true },
+    wilayahLevel: 'provinsi',
+    wilayahId: null,
+    status: 'open',
+  });
+
+  const floodObservation = await upsertByUnique('aIObservation', 'kodeObservation', {
+    kodeObservation: 'AIO-FLOOD-RESPONSE-001',
+    domain: 'disaster_response',
+    title: 'Respons banjir pasif terlambat',
+    summary: 'Flood-prone area menunjukkan delay koordinasi dan butuh response tracking.',
+    severity: 'critical',
+    evidence: { responseDelayHours: 18 },
+    wilayahLevel: 'kelurahan',
+    wilayahId: wilayah[0].kelurahan.id,
+    status: 'open',
+  });
+
+  const povertyHypothesis = await upsertByUnique('aIHypothesis', 'kodeHypothesis', {
+    kodeHypothesis: 'AIH-POVERTY-001',
+    observationId: povertyObservation.id,
+    statement: 'Food risk dan pengangguran kepala keluarga adalah penyebab utama tekanan sosial Kapuk.',
+    confidence: 0.78,
+    supportingData: { householdScore: 'high', mealGapFamilies: 'high' },
+    status: 'testing',
+  });
+
+  const aidRecommendation = await upsertByUnique('aIRecommendation', 'kodeRecommendation', {
+    kodeRecommendation: 'AIR-AID-FAIRNESS-001',
+    observationId: aidObservation.id,
+    hypothesisId: povertyHypothesis.id,
+    domain: 'aid_fairness',
+    recommendation: 'Bekukan distribusi penerima berulang sampai keluarga skor >80 yang belum menerima diverifikasi.',
+    priority: 'critical',
+    expectedImpact: 'Menurunkan uncovered high-risk families dan meningkatkan fairness score.',
+    status: 'accepted',
+  });
+
+  const warmindoRecommendation = await upsertByUnique('aIRecommendation', 'kodeRecommendation', {
+    kodeRecommendation: 'AIR-WRM-OPS-001',
+    observationId: warmindoObservation.id,
+    hypothesisId: null,
+    domain: 'warmindo',
+    recommendation: 'Replenish stok Kapuk, audit biaya freezer Angke, dan tambah shift Pondok Bambu.',
+    priority: 'high',
+    expectedImpact: 'Mengurangi lost sales dan cash variance.',
+    status: 'proposed',
+  });
+
+  const floodRecommendation = await upsertByUnique('aIRecommendation', 'kodeRecommendation', {
+    kodeRecommendation: 'AIR-FLOOD-RESPONSE-001',
+    observationId: floodObservation.id,
+    hypothesisId: null,
+    domain: 'disaster_response',
+    recommendation: 'Aktifkan response team lintas RW untuk Kapuk saat curah hujan tinggi.',
+    priority: 'critical',
+    expectedImpact: 'Response delay turun dari 18 jam menjadi kurang dari 6 jam.',
+    status: 'rejected',
+  });
+
+  const acceptedDecision = await upsertByUnique('humanDecision', 'kodeDecision', {
+    kodeDecision: 'HD-AID-FAIRNESS-001',
+    recommendationId: aidRecommendation.id,
+    decidedBy: createdBy,
+    decision: 'accepted',
+    reason: 'Diperlukan sebelum distribusi berikutnya agar bantuan lebih adil.',
+    decidedAt: startOfDay(0, 11),
+  });
+
+  const rejectedDecision = await upsertByUnique('humanDecision', 'kodeDecision', {
+    kodeDecision: 'HD-FLOOD-RESPONSE-001',
+    recommendationId: floodRecommendation.id,
+    decidedBy: createdBy,
+    decision: 'rejected',
+    reason: 'Koordinasi BPBD belum tersedia di runtime lokal.',
+    decidedAt: startOfDay(0, 12),
+  });
+
+  await upsertByUnique('outcomeTracking', 'kodeOutcome', {
+    kodeOutcome: 'OUT-AID-FAIRNESS-001',
+    recommendationId: aidRecommendation.id,
+    decisionId: acceptedDecision.id,
+    metricName: 'fairness_score',
+    baselineValue: 54,
+    currentValue: 68,
+    targetValue: 80,
+    status: 'tracking',
+    notes: 'Accepted decision mulai memperbaiki coverage keluarga risiko tinggi.',
+    measuredAt: startOfDay(0, 18),
+  });
+
+  await upsertByUnique('outcomeTracking', 'kodeOutcome', {
+    kodeOutcome: 'OUT-FLOOD-RESPONSE-001',
+    recommendationId: floodRecommendation.id,
+    decisionId: rejectedDecision.id,
+    metricName: 'response_delay_hours',
+    baselineValue: 18,
+    currentValue: 18,
+    targetValue: 6,
+    status: 'failed',
+    notes: 'Recommendation rejected, response delay unchanged.',
+    measuredAt: startOfDay(0, 18),
+  });
+
+  await upsertByUnique('aILearningMemory', 'kodeMemory', {
+    kodeMemory: 'AILM-AID-001',
+    domain: 'aid_fairness',
+    lesson: 'Fairness score improves when repeated-recipient review is combined with high-risk verification.',
+    evidence: { acceptedDecision: acceptedDecision.kodeDecision, metric: 'fairness_score' },
+    confidence: 0.74,
+  });
+
+  await upsertByUnique('aIFailureMemory', 'kodeFailure', {
+    kodeFailure: 'AIFM-FLOOD-001',
+    domain: 'disaster_response',
+    failedRecommendation: floodRecommendation.recommendation,
+    failureReason: 'Operational dependency on external response team not available.',
+    mitigation: 'Add government response integration and escalation owner before auto-recommending dispatch.',
+  });
+
+  await upsertByUnique('aICausalInference', 'kodeCausal', {
+    kodeCausal: 'AICI-POVERTY-FOOD-001',
+    cause: 'Pengangguran kepala keluarga dan harga pangan naik',
+    effect: 'Food risk dan laporan bantuan meningkat',
+    confidence: 0.69,
+    evidence: { area: 'Kapuk', reports: ['bantuan', 'ekonomi'], foodRiskScore: 'high' },
+    domain: 'poverty',
+  });
+
+  await upsertByUnique('aIRecommendation', 'kodeRecommendation', {
+    kodeRecommendation: 'AIR-WRM-FAILED-001',
+    observationId: warmindoObservation.id,
+    hypothesisId: null,
+    domain: 'warmindo',
+    recommendation: 'Naikkan harga semua produk 25% secara serentak.',
+    priority: 'medium',
+    expectedImpact: 'Meningkatkan margin, tetapi berisiko menurunkan permintaan.',
+    status: 'failed',
+  });
+}
+
 async function seedOfficialProfile() {
   await prisma.publicOfficial.upsert({
     where: { id: 1 },
@@ -864,7 +1472,7 @@ async function seedOfficialProfile() {
 }
 
 async function printCounts() {
-  const [users, families, warga, warmindo, reports, aidRecords, aiTasks, aiReports, alerts] = await Promise.all([
+  const [users, families, warga, warmindo, reports, aidRecords, aiTasks, aiReports, alerts, products, saleLines, attendance, fairness, territories, aiMemory] = await Promise.all([
     prisma.user.count(),
     prisma.keluarga.count(),
     prisma.warga.count(),
@@ -874,10 +1482,16 @@ async function printCounts() {
     prisma.aiTask.count(),
     prisma.aiReport.count(),
     prisma.operationalAlert.count(),
+    (prisma as any).warmindoProduct.count(),
+    (prisma as any).warmindoSaleLineItem.count(),
+    (prisma as any).warmindoAttendance.count(),
+    (prisma as any).bantuanFairnessSnapshot.count(),
+    (prisma as any).territorialStressSignal.count(),
+    (prisma as any).aIRecommendation.count(),
   ]);
 
   console.log('Seed counts:');
-  console.log(JSON.stringify({ users, families, warga, warmindoOutlets: warmindo, reports, aidRecords, aiRecords: aiTasks + aiReports, operationalAlerts: alerts }, null, 2));
+  console.log(JSON.stringify({ users, families, warga, warmindoOutlets: warmindo, warmindoProducts: products, saleLines, attendance, reports, aidRecords, fairnessSnapshots: fairness, territorialSignals: territories, aiRecords: aiTasks + aiReports + aiMemory, operationalAlerts: alerts }, null, 2));
 }
 
 async function main() {
@@ -888,11 +1502,14 @@ async function main() {
   const families = await seedPopulation(wilayah, admin.id);
   await seedUmkm(families, admin.id);
   const outlets = await seedWarmindo(wilayah);
+  await seedWarmindoFieldOps(outlets);
   await seedRoleUsers(wilayah, outlets);
   await seedAidAndFairness(families, admin.id);
   await seedReports(wilayah, admin.id);
+  await seedTerritorialIntelligence(wilayah);
   await seedOperationalAlerts(outlets, admin.id);
   await seedAiFoundation(wilayah, admin.id);
+  await seedAiGovernanceMemory(wilayah, admin.id);
   await seedOfficialProfile();
   await printCounts();
 
