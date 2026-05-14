@@ -493,6 +493,130 @@ model OperationalAlert {
   @@map("operational_alerts")
 }
 
+model TerritorialSocialProfile {
+  id                 Int      @id @default(autoincrement())
+  kodeProfile        String   @unique @map("kode_profile") @db.VarChar(40)
+  wilayahLevel       String   @map("wilayah_level") @db.VarChar(20)
+  wilayahId          Int      @map("wilayah_id")
+  label              String   @db.VarChar(200)
+  densityLevel       String   @map("density_level") @db.VarChar(30)
+  povertyRisk        String   @map("poverty_risk") @db.VarChar(30)
+  activeStatus       String   @map("active_status") @db.VarChar(30)
+  vulnerableFamilies Int      @default(0) @map("vulnerable_families")
+  elderlyCount       Int      @default(0) @map("elderly_count")
+  childrenCount      Int      @default(0) @map("children_count")
+  disabilityCount    Int      @default(0) @map("disability_count")
+  notes              String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([wilayahLevel, wilayahId])
+  @@index([povertyRisk])
+  @@index([activeStatus])
+  @@map("territorial_social_profiles")
+}
+
+model TerritorialEconomicSnapshot {
+  id                  Int      @id @default(autoincrement())
+  kodeSnapshot        String   @unique @map("kode_snapshot") @db.VarChar(40)
+  wilayahLevel        String   @map("wilayah_level") @db.VarChar(20)
+  wilayahId           Int      @map("wilayah_id")
+  unemploymentRate    Float    @map("unemployment_rate")
+  avgIncome           Float    @map("avg_income")
+  umkmCount           Int      @default(0) @map("umkm_count")
+  informalWorkerRate  Float    @map("informal_worker_rate")
+  economicStressScore Float    @map("economic_stress_score")
+  capturedAt          DateTime @default(now()) @map("captured_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([economicStressScore])
+  @@map("territorial_economic_snapshots")
+}
+
+model FoodSecuritySnapshot {
+  id               Int      @id @default(autoincrement())
+  kodeSnapshot     String   @unique @map("kode_snapshot") @db.VarChar(40)
+  wilayahLevel     String   @map("wilayah_level") @db.VarChar(20)
+  wilayahId        Int      @map("wilayah_id")
+  foodRiskScore    Float    @map("food_risk_score")
+  mealGapFamilies  Int      @default(0) @map("meal_gap_families")
+  staplePriceIndex Float    @map("staple_price_index")
+  notes            String?
+  capturedAt       DateTime @default(now()) @map("captured_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([foodRiskScore])
+  @@map("food_security_snapshots")
+}
+
+model TerritorialStressSignal {
+  id           Int      @id @default(autoincrement())
+  kodeSignal   String   @unique @map("kode_signal") @db.VarChar(40)
+  wilayahLevel String   @map("wilayah_level") @db.VarChar(20)
+  wilayahId    Int      @map("wilayah_id")
+  signalType   String   @map("signal_type") @db.VarChar(50)
+  severity     String   @default("medium") @db.VarChar(20)
+  score        Float    @default(0)
+  description  String
+  status       String   @default("open") @db.VarChar(30)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([signalType])
+  @@index([severity])
+  @@index([status])
+  @@map("territorial_stress_signals")
+}
+
+model DisasterEvent {
+  id               Int      @id @default(autoincrement())
+  kodeEvent        String   @unique @map("kode_event") @db.VarChar(40)
+  wilayahLevel     String   @map("wilayah_level") @db.VarChar(20)
+  wilayahId        Int      @map("wilayah_id")
+  eventType        String   @map("event_type") @db.VarChar(50)
+  severity         String   @default("medium") @db.VarChar(20)
+  occurredAt       DateTime @map("occurred_at")
+  affectedFamilies Int      @default(0) @map("affected_families")
+  status           String   @default("active") @db.VarChar(30)
+  description      String
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([eventType])
+  @@index([severity])
+  @@index([status])
+  @@map("disaster_events")
+}
+
+model GovernmentResponse {
+  id                 Int       @id @default(autoincrement())
+  kodeResponse       String    @unique @map("kode_response") @db.VarChar(40)
+  eventId            Int?      @map("event_id")
+  laporanId          Int?      @map("laporan_id")
+  wilayahLevel       String    @map("wilayah_level") @db.VarChar(20)
+  wilayahId          Int       @map("wilayah_id")
+  responseType       String    @map("response_type") @db.VarChar(50)
+  status             String    @default("pending") @db.VarChar(30)
+  responseDelayHours Float     @default(0) @map("response_delay_hours")
+  startedAt          DateTime? @map("started_at")
+  completedAt        DateTime? @map("completed_at")
+  notes              String?
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([eventId])
+  @@index([laporanId])
+  @@index([wilayahLevel, wilayahId])
+  @@index([status])
+  @@map("government_responses")
+}
+
 // ── BANTUAN ──────────────────────────────────────────────────────
 
 model Bantuan {
@@ -539,6 +663,50 @@ model BantuanPenerima {
   @@index([rtId])
   @@index([status])
   @@map("bantuan_penerima")
+}
+
+model BantuanFairnessSnapshot {
+  id                 Int      @id @default(autoincrement())
+  kodeSnapshot       String   @unique @map("kode_snapshot") @db.VarChar(40)
+  wilayahLevel       String   @map("wilayah_level") @db.VarChar(20)
+  wilayahId          Int?     @map("wilayah_id")
+  fairnessScore      Float    @map("fairness_score")
+  repeatedRecipients Int      @default(0) @map("repeated_recipients")
+  uncoveredHighRisk  Int      @default(0) @map("uncovered_high_risk")
+  totalRecipients    Int      @default(0) @map("total_recipients")
+  totalHighRisk      Int      @default(0) @map("total_high_risk")
+  notes              String?
+  metrics            Json     @default("{}")
+  calculatedAt       DateTime @default(now()) @map("calculated_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([wilayahLevel, wilayahId])
+  @@index([fairnessScore])
+  @@map("bantuan_fairness_snapshots")
+}
+
+model BantuanAnomaly {
+  id          Int      @id @default(autoincrement())
+  kodeAnomaly String   @unique @map("kode_anomaly") @db.VarChar(40)
+  tipe        String   @db.VarChar(50)
+  severity    String   @default("medium") @db.VarChar(20)
+  keluargaId  Int?     @map("keluarga_id")
+  bantuanId   Int?     @map("bantuan_id")
+  rtId        Int?     @map("rt_id")
+  title       String   @db.VarChar(200)
+  description String
+  status      String   @default("open") @db.VarChar(20)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([tipe])
+  @@index([severity])
+  @@index([status])
+  @@index([keluargaId])
+  @@index([rtId])
+  @@map("bantuan_anomalies")
 }
 
 // ── WARMINDO ─────────────────────────────────────────────────────
@@ -632,6 +800,273 @@ model WarmindoPengeluaran {
 
   @@index([warmindoId, tanggal(sort: Desc)])
   @@map("warmindo_pengeluaran")
+}
+
+model WarmindoSupplier {
+  id           Int      @id @default(autoincrement())
+  kodeSupplier String   @unique @map("kode_supplier") @db.VarChar(30)
+  nama         String   @db.VarChar(200)
+  kategori     String   @db.VarChar(50)
+  noHp         String?  @map("no_hp") @db.VarChar(20)
+  alamat       String?
+  aktif        Boolean  @default(true)
+  rating       Float    @default(4)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([aktif])
+  @@index([kategori])
+  @@map("warmindo_suppliers")
+}
+
+model WarmindoProduct {
+  id           Int      @id @default(autoincrement())
+  kodeProduct  String   @unique @map("kode_product") @db.VarChar(40)
+  warmindoId   Int      @map("warmindo_id")
+  nama         String   @db.VarChar(200)
+  kategori     String   @db.VarChar(50)
+  hargaJual    Float    @map("harga_jual")
+  hpp          Float    @default(0)
+  aktif        Boolean  @default(true)
+  isBestSeller Boolean  @default(false) @map("is_best_seller")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([warmindoId, nama])
+  @@index([warmindoId])
+  @@index([kategori])
+  @@index([aktif])
+  @@map("warmindo_products")
+}
+
+model WarmindoSaleLineItem {
+  id          Int      @id @default(autoincrement())
+  transaksiId Int      @map("transaksi_id")
+  warmindoId  Int      @map("warmindo_id")
+  productId   Int?     @map("product_id")
+  productName String   @map("product_name") @db.VarChar(200)
+  qty         Int
+  unitPrice   Float    @map("unit_price")
+  unitHpp     Float    @default(0) @map("unit_hpp")
+  total       Float
+  grossProfit Float    @default(0) @map("gross_profit")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([transaksiId])
+  @@index([warmindoId])
+  @@index([productId])
+  @@map("warmindo_sale_line_items")
+}
+
+model WarmindoProcurement {
+  id              Int      @id @default(autoincrement())
+  kodeProcurement String   @unique @map("kode_procurement") @db.VarChar(40)
+  warmindoId      Int      @map("warmindo_id")
+  supplierId      Int?     @map("supplier_id")
+  tanggal         DateTime @default(now())
+  status          String   @default("received") @db.VarChar(30)
+  totalAmount     Float    @default(0) @map("total_amount")
+  paymentStatus   String   @default("paid") @map("payment_status") @db.VarChar(30)
+  catatan         String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([warmindoId, tanggal(sort: Desc)])
+  @@index([supplierId])
+  @@index([status])
+  @@map("warmindo_procurements")
+}
+
+model WarmindoProcurementItem {
+  id            Int      @id @default(autoincrement())
+  procurementId Int      @map("procurement_id")
+  inventoryName String   @map("inventory_name") @db.VarChar(200)
+  qty           Float
+  satuan        String   @db.VarChar(20)
+  unitCost      Float    @map("unit_cost")
+  totalCost     Float    @map("total_cost")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([procurementId])
+  @@map("warmindo_procurement_items")
+}
+
+model WarmindoStockMovement {
+  id            Int      @id @default(autoincrement())
+  warmindoId    Int      @map("warmindo_id")
+  inventoryId   Int?     @map("inventory_id")
+  namaBahan     String   @map("nama_bahan") @db.VarChar(200)
+  movementType  String   @map("movement_type") @db.VarChar(20)
+  qty           Float
+  satuan        String   @db.VarChar(20)
+  reason        String   @db.VarChar(100)
+  referenceType String?  @map("reference_type") @db.VarChar(50)
+  referenceId   Int?     @map("reference_id")
+  tanggal       DateTime @default(now())
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([warmindoId, tanggal(sort: Desc)])
+  @@index([inventoryId])
+  @@index([movementType])
+  @@map("warmindo_stock_movements")
+}
+
+model WarmindoCashflowLedger {
+  id            Int      @id @default(autoincrement())
+  warmindoId    Int      @map("warmindo_id")
+  tanggal       DateTime @default(now())
+  direction     String   @db.VarChar(10)
+  kategori      String   @db.VarChar(50)
+  amount        Float
+  description   String   @db.VarChar(300)
+  referenceType String?  @map("reference_type") @db.VarChar(50)
+  referenceId   Int?     @map("reference_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([warmindoId, tanggal(sort: Desc)])
+  @@index([direction])
+  @@index([kategori])
+  @@map("warmindo_cashflow_ledger")
+}
+
+model WarmindoDailyClosing {
+  id            Int      @id @default(autoincrement())
+  kodeClosing   String   @unique @map("kode_closing") @db.VarChar(40)
+  warmindoId    Int      @map("warmindo_id")
+  tanggal       DateTime @db.Date
+  totalSales    Float    @default(0) @map("total_sales")
+  totalExpenses Float    @default(0) @map("total_expenses")
+  cashExpected  Float    @default(0) @map("cash_expected")
+  cashActual    Float    @default(0) @map("cash_actual")
+  variance      Float    @default(0)
+  status        String   @default("closed") @db.VarChar(30)
+  closedBy      Int?     @map("closed_by")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([warmindoId, tanggal])
+  @@index([status])
+  @@map("warmindo_daily_closings")
+}
+
+model WarmindoEmployee {
+  id           Int      @id @default(autoincrement())
+  kodeEmployee String   @unique @map("kode_employee") @db.VarChar(40)
+  warmindoId   Int      @map("warmindo_id")
+  nama         String   @db.VarChar(150)
+  role         String   @db.VarChar(50)
+  noHp         String?  @map("no_hp") @db.VarChar(20)
+  gajiPokok    Float    @default(0) @map("gaji_pokok")
+  aktif        Boolean  @default(true)
+  joinedAt     DateTime @default(now()) @map("joined_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([warmindoId])
+  @@index([aktif])
+  @@map("warmindo_employees")
+}
+
+model WarmindoShift {
+  id         Int      @id @default(autoincrement())
+  kodeShift  String   @unique @map("kode_shift") @db.VarChar(40)
+  warmindoId Int      @map("warmindo_id")
+  employeeId Int      @map("employee_id")
+  tanggal    DateTime @db.Date
+  shiftName  String   @map("shift_name") @db.VarChar(50)
+  startTime  DateTime @map("start_time")
+  endTime    DateTime @map("end_time")
+  status     String   @default("scheduled") @db.VarChar(30)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([warmindoId, tanggal])
+  @@index([employeeId])
+  @@index([status])
+  @@map("warmindo_shifts")
+}
+
+model WarmindoAttendance {
+  id             Int       @id @default(autoincrement())
+  kodeAttendance String    @unique @map("kode_attendance") @db.VarChar(40)
+  warmindoId     Int       @map("warmindo_id")
+  employeeId     Int       @map("employee_id")
+  shiftId        Int?      @map("shift_id")
+  tanggal        DateTime  @db.Date
+  checkIn        DateTime? @map("check_in")
+  checkOut       DateTime? @map("check_out")
+  status         String    @default("present") @db.VarChar(30)
+  lateMinutes    Int       @default(0) @map("late_minutes")
+  notes          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([warmindoId, tanggal])
+  @@index([employeeId])
+  @@index([status])
+  @@map("warmindo_attendance")
+}
+
+model WarmindoPayroll {
+  id          Int       @id @default(autoincrement())
+  kodePayroll String    @unique @map("kode_payroll") @db.VarChar(40)
+  warmindoId  Int       @map("warmindo_id")
+  employeeId  Int       @map("employee_id")
+  periode     String    @db.VarChar(20)
+  baseSalary  Float     @map("base_salary")
+  bonus       Float     @default(0)
+  deduction   Float     @default(0)
+  netSalary   Float     @map("net_salary")
+  status      String    @default("paid") @db.VarChar(30)
+  paidAt      DateTime? @map("paid_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([warmindoId])
+  @@index([employeeId])
+  @@index([periode])
+  @@map("warmindo_payroll")
+}
+
+model WarmindoAsset {
+  id          Int       @id @default(autoincrement())
+  kodeAsset   String    @unique @map("kode_asset") @db.VarChar(40)
+  warmindoId  Int       @map("warmindo_id")
+  namaAsset   String    @map("nama_asset") @db.VarChar(150)
+  kategori    String    @db.VarChar(50)
+  kondisi     String    @default("baik") @db.VarChar(30)
+  nilaiBeli   Float     @default(0) @map("nilai_beli")
+  tanggalBeli DateTime? @map("tanggal_beli") @db.Date
+  aktif       Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([warmindoId])
+  @@index([kondisi])
+  @@map("warmindo_assets")
+}
+
+model WarmindoMaintenance {
+  id              Int       @id @default(autoincrement())
+  kodeMaintenance String    @unique @map("kode_maintenance") @db.VarChar(40)
+  warmindoId      Int       @map("warmindo_id")
+  assetId         Int?      @map("asset_id")
+  tanggal         DateTime  @default(now())
+  issue           String    @db.VarChar(300)
+  severity        String    @default("medium") @db.VarChar(20)
+  status          String    @default("open") @db.VarChar(30)
+  cost            Float     @default(0)
+  resolvedAt      DateTime? @map("resolved_at")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([warmindoId, tanggal(sort: Desc)])
+  @@index([assetId])
+  @@index([status])
+  @@index([severity])
+  @@map("warmindo_maintenance")
 }
 
 // ── FILES ─────────────────────────────────────────────────────────
@@ -729,6 +1164,146 @@ model VideoJob {
   @@index([status])
   @@index([createdBy])
   @@map("video_jobs")
+}
+
+model AIObservation {
+  id              Int      @id @default(autoincrement())
+  kodeObservation String   @unique @map("kode_observation") @db.VarChar(40)
+  domain          String   @db.VarChar(50)
+  title           String   @db.VarChar(200)
+  summary         String
+  severity        String   @default("medium") @db.VarChar(20)
+  evidence        Json     @default("{}")
+  wilayahLevel    String?  @map("wilayah_level") @db.VarChar(20)
+  wilayahId       Int?     @map("wilayah_id")
+  status          String   @default("open") @db.VarChar(30)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([domain])
+  @@index([severity])
+  @@index([status])
+  @@index([wilayahLevel, wilayahId])
+  @@map("ai_observations")
+}
+
+model AIHypothesis {
+  id             Int      @id @default(autoincrement())
+  kodeHypothesis String   @unique @map("kode_hypothesis") @db.VarChar(40)
+  observationId  Int?     @map("observation_id")
+  statement      String
+  confidence     Float    @default(0.5)
+  supportingData Json     @default("{}") @map("supporting_data")
+  status         String   @default("testing") @db.VarChar(30)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([observationId])
+  @@index([status])
+  @@map("ai_hypotheses")
+}
+
+model AIRecommendation {
+  id                 Int      @id @default(autoincrement())
+  kodeRecommendation String   @unique @map("kode_recommendation") @db.VarChar(40)
+  observationId      Int?     @map("observation_id")
+  hypothesisId       Int?     @map("hypothesis_id")
+  domain             String   @db.VarChar(50)
+  recommendation     String
+  priority           String   @default("medium") @db.VarChar(20)
+  expectedImpact     String?  @map("expected_impact")
+  status             String   @default("proposed") @db.VarChar(30)
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@index([domain])
+  @@index([priority])
+  @@index([status])
+  @@index([observationId])
+  @@index([hypothesisId])
+  @@map("ai_recommendations")
+}
+
+model HumanDecision {
+  id               Int      @id @default(autoincrement())
+  kodeDecision     String   @unique @map("kode_decision") @db.VarChar(40)
+  recommendationId Int?     @map("recommendation_id")
+  decidedBy        Int?     @map("decided_by")
+  decision         String   @db.VarChar(30)
+  reason           String?
+  decidedAt        DateTime @default(now()) @map("decided_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([recommendationId])
+  @@index([decision])
+  @@index([decidedBy])
+  @@map("human_decisions")
+}
+
+model OutcomeTracking {
+  id               Int      @id @default(autoincrement())
+  kodeOutcome      String   @unique @map("kode_outcome") @db.VarChar(40)
+  recommendationId Int?     @map("recommendation_id")
+  decisionId       Int?     @map("decision_id")
+  metricName       String   @map("metric_name") @db.VarChar(100)
+  baselineValue    Float?   @map("baseline_value")
+  currentValue     Float?   @map("current_value")
+  targetValue      Float?   @map("target_value")
+  status           String   @default("tracking") @db.VarChar(30)
+  notes            String?
+  measuredAt       DateTime @default(now()) @map("measured_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([recommendationId])
+  @@index([decisionId])
+  @@index([status])
+  @@map("outcome_tracking")
+}
+
+model AILearningMemory {
+  id         Int      @id @default(autoincrement())
+  kodeMemory String   @unique @map("kode_memory") @db.VarChar(40)
+  domain     String   @db.VarChar(50)
+  lesson     String
+  evidence   Json     @default("{}")
+  confidence Float    @default(0.5)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([domain])
+  @@map("ai_learning_memory")
+}
+
+model AIFailureMemory {
+  id                   Int      @id @default(autoincrement())
+  kodeFailure          String   @unique @map("kode_failure") @db.VarChar(40)
+  domain               String   @db.VarChar(50)
+  failedRecommendation String   @map("failed_recommendation")
+  failureReason        String   @map("failure_reason")
+  mitigation           String?
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([domain])
+  @@map("ai_failure_memory")
+}
+
+model AICausalInference {
+  id         Int      @id @default(autoincrement())
+  kodeCausal String   @unique @map("kode_causal") @db.VarChar(40)
+  cause      String
+  effect     String
+  confidence Float    @default(0.5)
+  evidence   Json     @default("{}")
+  domain     String   @db.VarChar(50)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([domain])
+  @@index([confidence])
+  @@map("ai_causal_inferences")
 }
 
 // ── TPS / QUICK COUNT ─────────────────────────────────────────────
