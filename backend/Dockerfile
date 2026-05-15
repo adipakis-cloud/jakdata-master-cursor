@@ -1,18 +1,16 @@
 FROM node:20-alpine
 
+# Install OpenSSL untuk Prisma
+RUN apk add --no-cache openssl
+
 WORKDIR /app
 
-# Copy package files
 COPY package*.json ./
 COPY prisma ./prisma/
 
-# Install ALL dependencies (including devDeps for ts-node)
 RUN npm install
-
-# Generate Prisma client
 RUN npx prisma generate
 
-# Copy source
 COPY . .
 
 EXPOSE 3001
