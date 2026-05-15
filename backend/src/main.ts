@@ -33,6 +33,7 @@ function corsOriginAllowed(origin: string | undefined): boolean {
     'http://localhost:3000',
     'http://localhost:4173',
     process.env.FRONTEND_URL,
+      process.env.COMMAND_URL,
   ].filter(Boolean) as string[];
   if (!origin) return true;
   if (allowed.includes(origin)) return true;
@@ -165,6 +166,7 @@ bootstrap().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
 
 
 
