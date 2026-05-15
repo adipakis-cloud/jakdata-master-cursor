@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
 import { getPagination } from '../../lib/pagination';
 import { sanitizeObject } from '../../lib/sanitize';
+import { checkWargaDuplicate } from '../../lib/wargaDuplicate';
 import { territoryScopeMiddleware } from '../../middleware/territoryScope.middleware';
 import { assertRtInScope, buildWargaListWhere, findWargaInScope, isMobileFieldRole } from '../security/security';
 
@@ -50,10 +51,47 @@ export async function wargaRoutes(app: FastifyInstance) {
     return { data, total, page, limit, totalPages };
   });
 
+  app.get('/check-nik/:nik', { preHandler: authScope(app) }, async (req: any) => {
+    const nik = String(req.params.nik ?? '').trim();
+    const result = await checkWargaDuplicate({ nik });
+    return {
+      valid: !result.isDuplicate,
+      issues: result.issues,
+      nikInfo: result.nikInfo,
+    };
+  });
+
+  app.post('/check-duplicate', { preHandler: authScope(app) }, async (req: any) => {
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+    const nik = body.nik != null ? String(body.nik) : undefined;
+    const noHp = body.noHp != null ? String(body.noHp) : undefined;
+    const nama = body.nama != null ? String(body.nama) : undefined;
+    const tanggalLahirStr = body.tanggalLahirStr != null ? String(body.tanggalLahirStr) : undefined;
+    const tanggalLahir = tanggalLahirStr ? new Date(tanggalLahirStr) : undefined;
+    const excludeId = body.excludeId != null ? Number(body.excludeId) : undefined;
+    return checkWargaDuplicate({
+      nik,
+      noHp,
+      nama,
+      tanggalLahir: tanggalLahir && !Number.isNaN(tanggalLahir.getTime()) ? tanggalLahir : undefined,
+      excludeId: excludeId > 0 ? excludeId : undefined,
+    });
+  });
+
   app.post('/', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const user = req.user;
     const raw = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
-    const b = sanitizeObject(raw, ['nama', 'noHp', 'jenisKelamin', 'alamat', 'pekerjaan', 'catatan', 'kategori']) as any;
+    const b = sanitizeObject(raw, [
+      'nama',
+      'noHp',
+      'nik',
+      'jenisKelamin',
+      'alamat',
+      'pekerjaan',
+      'catatan',
+      'kategori',
+      'statusEkonomi',
+    ]) as any;
 
     if (!b.nama || !b.rtId) {
       return reply.code(400).send({ error: 'Nama dan RT wajib diisi' });
@@ -65,20 +103,49 @@ export async function wargaRoutes(app: FastifyInstance) {
       if (!ok) return;
     }
 
+    const nikClean = b.nik ? String(b.nik).replace(/\s/g, '') : undefined;
+    const tanggalLahir =
+      b.tanggalLahir != null && String(b.tanggalLahir).trim()
+        ? new Date(String(b.tanggalLahir))
+        : undefined;
+
+    const dup = await checkWargaDuplicate({
+      nik: nikClean,
+      noHp: b.noHp,
+      nama: b.nama,
+      tanggalLahir: tanggalLahir && !Number.isNaN(tanggalLahir.getTime()) ? tanggalLahir : undefined,
+    });
+
+    if (dup.isDuplicate) {
+      return reply.code(409).send({
+        error: 'Data warga tidak dapat disimpan',
+        reason: dup.issues.find((i) => i.severity === 'error')?.message ?? 'Data duplikat',
+        issues: dup.issues,
+      });
+    }
+
     const warga = await prisma.warga.create({
       data: {
         rtId: targetRt,
         nama: b.nama,
-        noHp: b.noHp,
-        jenisKelamin: b.jenisKelamin,
-        alamat: b.alamat,
-        pekerjaan: b.pekerjaan,
+        nikHash: nikClean || null,
+        noHp: b.noHp || null,
+        jenisKelamin: b.jenisKelamin || null,
+        tanggalLahir: tanggalLahir && !Number.isNaN(tanggalLahir.getTime()) ? tanggalLahir : null,
+        alamat: b.alamat || null,
+        pekerjaan: b.pekerjaan || null,
+        penghasilanEst: b.penghasilanEst != null ? Number(b.penghasilanEst) : null,
         kategori: b.kategori || 'warga_biasa',
         statusEkonomi: b.statusEkonomi || null,
-        catatan: b.catatan,
+        catatan: b.catatan || null,
         createdBy: user.sub,
       },
     });
+
+    const warnings = dup.issues.filter((i) => i.severity === 'warning');
+    if (warnings.length > 0) {
+      return reply.code(201).send({ warga, warnings: dup.issues });
+    }
 
     return reply.code(201).send(warga);
   });

@@ -4,6 +4,7 @@ import { api } from '../../lib/api';
 import { AuthStorage } from '../../lib/auth';
 import { useAuth } from '../../store/auth.store';
 import { FieldLayout } from './FieldLayout';
+import TambahWarga from './TambahWarga';
 
 type FieldCtx = {
   warga: any[];
@@ -108,8 +109,8 @@ export function FieldApp() {
           <Route path="laporan/baru" element={<FieldBuatLaporanRoute />} />
           <Route path="laporan/:id" element={<FieldLaporanDetailRoute />} />
           <Route path="warga" element={<FieldListWargaRoute />} />
-          <Route path="warga/:id" element={<FieldWargaDetailRoute />} />
           <Route path="warga/tambah" element={<FieldTambahWargaRoute />} />
+          <Route path="warga/:id" element={<FieldWargaDetailRoute />} />
           <Route path="bantuan" element={<FieldBantuanRoute />} />
           <Route path="upload" element={<FieldUploadRoute />} />
           <Route path="wilayah" element={<FieldWilayahRoute />} />
@@ -507,7 +508,7 @@ function FieldListWargaRoute() {
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-[18px] font-bold text-gray-900">Data Warga</h2>
         <button type="button" className="text-xs font-semibold text-blue-600" onClick={() => nav('/field/warga/tambah')}>
-          + Tambah
+          + Tambah Warga
         </button>
       </div>
       <input
@@ -604,11 +605,12 @@ function FieldWargaDetailRoute() {
 }
 
 function FieldTambahWargaRoute() {
-  const { user, loadData, showToast } = useFieldData();
+  const { user, rtInfo, loadData, showToast } = useFieldData();
   const nav = useNavigate();
   return (
-    <FieldTambahWarga
+    <TambahWarga
       user={user}
+      rtInfo={rtInfo}
       onBack={() => nav('/field/warga')}
       onSuccess={() => {
         loadData();
@@ -669,129 +671,6 @@ function FieldProfilRoute({ onLogout }: { onLogout: () => void }) {
         Keluar dari Akun
       </button>
       <p className="text-center text-[12px] text-[#9ca3af]">JAKDATA Field v0.1</p>
-    </div>
-  );
-}
-
-function FieldTambahWarga({ user, onBack, onSuccess }: { user: any; onBack: () => void; onSuccess: () => void }) {
-  const [rtList, setRtList] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    nama: '',
-    noHp: '',
-    rtId: String(user?.rtId ?? ''),
-    jenisKelamin: '',
-    kategori: 'warga_biasa',
-    pekerjaan: '',
-    statusEkonomi: '',
-    catatan: '',
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-
-  useEffect(() => {
-    api
-      .get('/wilayah/rt')
-      .then((r) => setRtList(r.data))
-      .catch(console.error);
-  }, []);
-
-  async function submit() {
-    if (!form.nama.trim()) {
-      setError('Nama wajib diisi');
-      return;
-    }
-    if (!form.rtId) {
-      setError('RT wajib dipilih');
-      return;
-    }
-    setError('');
-    setSaving(true);
-    try {
-      await api.post('/warga', form);
-      onSuccess();
-    } catch (e: any) {
-      setError(e.response?.data?.error ?? 'Gagal menyimpan');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={onBack} className="text-sm font-semibold text-blue-600">
-          ← Kembali
-        </button>
-        <h2 className="font-bold text-gray-900">Tambah Warga</h2>
-      </div>
-      {error && <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-      <div className="card space-y-4 p-4">
-        <div>
-          <label className="label">Nama Lengkap *</label>
-          <input
-            className="input"
-            autoFocus
-            value={form.nama}
-            onChange={(e) => setForm({ ...form, nama: e.target.value })}
-            placeholder="Masukkan nama lengkap"
-          />
-        </div>
-        <div>
-          <label className="label">No. HP / WA</label>
-          <input
-            className="input"
-            type="tel"
-            inputMode="tel"
-            value={form.noHp}
-            onChange={(e) => setForm({ ...form, noHp: e.target.value })}
-            placeholder="081xxx..."
-          />
-        </div>
-        <div>
-          <label className="label">RT *</label>
-          <select className="input" value={form.rtId} onChange={(e) => setForm({ ...form, rtId: e.target.value })}>
-            <option value="">Pilih RT...</option>
-            {rtList.map((rt: any) => (
-              <option key={rt.id} value={rt.id}>
-                RT {rt.nomor} — {rt.rw?.kelurahan?.nama}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Kategori Warga</label>
-          <select className="input" value={form.kategori} onChange={(e) => setForm({ ...form, kategori: e.target.value })}>
-            <option value="warga_biasa">Warga Biasa</option>
-            <option value="ketua_rt">Ketua RT</option>
-            <option value="ketua_rw">Ketua RW</option>
-            <option value="koordinator">Koordinator</option>
-            <option value="penerima_bantuan">Penerima Bantuan</option>
-            <option value="pekerja_warmindo">Pekerja Warmindo</option>
-          </select>
-        </div>
-        <div>
-          <label className="label">Pekerjaan</label>
-          <input className="input" value={form.pekerjaan} onChange={(e) => setForm({ ...form, pekerjaan: e.target.value })} placeholder="Pekerjaan" />
-        </div>
-        <div>
-          <label className="label">Status Ekonomi</label>
-          <select className="input" value={form.statusEkonomi} onChange={(e) => setForm({ ...form, statusEkonomi: e.target.value })}>
-            <option value="">Pilih status...</option>
-            <option value="sangat_miskin">Sangat Miskin</option>
-            <option value="miskin">Miskin</option>
-            <option value="rentan">Rentan</option>
-            <option value="sedang">Sedang</option>
-            <option value="mampu">Mampu</option>
-          </select>
-        </div>
-        <div>
-          <label className="label">Catatan</label>
-          <textarea className="input" rows={2} value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Opsional" />
-        </div>
-      </div>
-      <button className="btn-primary w-full justify-center py-4 text-base" disabled={saving} onClick={submit}>
-        {saving ? 'Menyimpan…' : 'Simpan Warga'}
-      </button>
     </div>
   );
 }
