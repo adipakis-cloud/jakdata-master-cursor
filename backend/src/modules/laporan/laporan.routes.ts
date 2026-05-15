@@ -2,13 +2,14 @@ import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
 import path from 'path';
 import fs from 'fs';
+import { assertRtAccess, scopedRtIds } from '../security/scope';
 
 export async function laporanRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: [app.authenticate] }, async (req) => {
     const user = req.user as any;
     const { status, urgency, kategori, page = 1, limit = 20 } = req.query as any;
-    let where: any = {};
-    if (user.role !== 'admin_pusat' && user.rtId) where.rtId = user.rtId;
+    const rtIds = await scopedRtIds(user);
+    let where: any = rtIds === null ? {} : { rtId: { in: rtIds } };
     if (status) where.status = status;
     if (urgency) where.urgencyLevel = urgency;
     if (kategori) where.kategori = kategori;
@@ -28,13 +29,18 @@ export async function laporanRoutes(app: FastifyInstance) {
     const count = await prisma.laporanWarga.count();
     const kode = `JAK-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
 
+    const selectedRtId = body.rtId ? +body.rtId : (user.rtId ?? null);
+    if (selectedRtId) {
+      try { await assertRtAccess(user, selectedRtId); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
+    }
+
     const laporan = await prisma.laporanWarga.create({
       data: {
         kodeLaporan: kode, channelType: body.channelType ?? 'web',
         namaPelapor: body.namaPelapor ?? user.nama, noHpPelapor: body.noHpPelapor,
         isiLaporan: body.isiLaporan, kategori: body.kategori, subkategori: body.subkategori,
         urgencyLevel: body.urgencyLevel ?? 'medium', lokasiText: body.lokasiText,
-        rtId: body.rtId ? +body.rtId : (user.rtId ?? null),
+        rtId: selectedRtId,
         isEmergency: body.urgencyLevel === 'critical', lampiranUrls: body.lampiranUrls ?? [],
         createdBy: user.sub,
       },
@@ -49,9 +55,13 @@ export async function laporanRoutes(app: FastifyInstance) {
     return prisma.laporanWarga.findUnique({ where: { id: +id }, include: { messages: { orderBy: { createdAt: 'asc' } } } });
   });
 
-  app.patch('/:id/status', { preHandler: [app.authenticate] }, async (req) => {
+  app.patch('/:id/status', { preHandler: [app.authenticate] }, async (req, reply) => {
     const { id } = req.params as any;
     const { status, catatan } = req.body as any;
+    const existing = await prisma.laporanWarga.findUnique({ where: { id: +id } });
+    if (existing?.rtId) {
+      try { await assertRtAccess(req.user as any, existing.rtId); } catch (e: any) { return (reply as any).code(e.statusCode ?? 500).send({ error: e.message }); }
+    }
     const laporan = await prisma.laporanWarga.update({ where: { id: +id }, data: { status, resolvedAt: status === 'selesai' ? new Date() : undefined } });
     if (catatan) await prisma.laporanMessage.create({ data: { laporanId: +id, senderType: 'admin', messageText: catatan, isInternal: true } });
     return laporan;

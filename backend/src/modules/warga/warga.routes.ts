@@ -1,16 +1,16 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { assertRtAccess, scopedRtIds } from '../security/scope';
 
 export async function wargaRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: [app.authenticate] }, async (req: any) => {
     const user = req.user;
     const { rtId, page = 1, limit = 50, q } = req.query;
-    const where: any = {};
-
-    if (user.role === 'admin_pusat') {
-      if (rtId) where.rtId = Number(rtId);
-    } else if (user.rtId) {
-      where.rtId = user.rtId;
+    const rtIds = await scopedRtIds(user);
+    const where: any = rtIds === null ? {} : { rtId: { in: rtIds } };
+    if (rtId) {
+      if (rtIds !== null && !rtIds.includes(Number(rtId))) return { data: [], total: 0, page: Number(page), limit: Number(limit) };
+      where.rtId = Number(rtId);
     }
 
     if (q) where.nama = { contains: q, mode: 'insensitive' };
@@ -37,9 +37,7 @@ export async function wargaRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: 'Nama dan RT wajib diisi' });
     }
 
-    if (user.role === 'petugas_lapangan' && user.rtId && user.rtId !== Number(b.rtId)) {
-      return reply.code(403).send({ error: 'Hanya bisa menambah warga di RT Anda' });
-    }
+    try { await assertRtAccess(user, Number(b.rtId)); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
 
     const warga = await prisma.warga.create({
       data: {
@@ -87,7 +85,8 @@ export async function wargaRoutes(app: FastifyInstance) {
 
   app.get('/keluarga/list', { preHandler: [app.authenticate] }, async (req: any) => {
     const user = req.user;
-    const where: any = user.rtId ? { rtId: user.rtId } : {};
+    const rtIds = await scopedRtIds(user);
+    const where: any = rtIds === null ? {} : { rtId: { in: rtIds } };
     return prisma.keluarga.findMany({
       where,
       include: { rt: true, _count: { select: { warga: true } } },
@@ -97,6 +96,8 @@ export async function wargaRoutes(app: FastifyInstance) {
 
   app.post('/keluarga', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
     const b = req.body;
+    const user = req.user as any;
+    try { await assertRtAccess(user, Number(b.rtId)); } catch (e: any) { return reply.code(e.statusCode ?? 500).send({ error: e.message }); }
     const kk = await prisma.keluarga.create({
       data: {
         rtId: Number(b.rtId),

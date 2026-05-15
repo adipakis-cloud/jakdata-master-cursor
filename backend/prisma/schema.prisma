@@ -1092,6 +1092,33 @@ model File {
   @@map("files")
 }
 
+model FieldEvidence {
+  id          Int      @id @default(autoincrement())
+  uuid        String   @unique @default(uuid())
+  actionType  String   @map("action_type") @db.VarChar(50)
+  entityType  String?  @map("entity_type") @db.VarChar(50)
+  entityId    Int?     @map("entity_id")
+  photoUrl    String?  @map("photo_url")
+  latitude    Float?
+  longitude   Float?
+  note        String?
+  userId      Int?     @map("user_id")
+  rtId        Int?     @map("rt_id")
+  rwId        Int?     @map("rw_id")
+  kelurahanId Int?     @map("kelurahan_id")
+  warmindoId  Int?     @map("warmindo_id")
+  capturedAt  DateTime @default(now()) @map("captured_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([actionType])
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([rtId])
+  @@index([warmindoId])
+  @@index([capturedAt(sort: Desc)])
+  @@map("field_evidence")
+}
+
 // ── AI ENGINE ─────────────────────────────────────────────────────
 
 model AiTask {
