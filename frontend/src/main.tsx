@@ -50,7 +50,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/command/*" element={<Navigate to="/admin" replace />} />
+        <Route path="/command/*" element={<Navigate to="/admin/home" replace />} />
+        <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
         <Route
           path="/admin/*"
           element={

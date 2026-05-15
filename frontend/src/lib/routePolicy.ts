@@ -36,7 +36,7 @@ export function defaultHomePath(role: string): string {
     case 'admin_kelurahan':
     case 'auditor':
     case 'finance_admin':
-      return '/admin';
+      return '/admin/home';
     case 'koordinator_kecamatan':
     case 'koordinator_kelurahan':
     case 'koordinator_rw':

@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Routes, Route, NavLink, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '../../store/auth.store';
 import { AdminDashboard } from './AdminDashboard';
+import AdminHome from './AdminHome';
 import { AdminWarga, AdminLaporan, AdminWarmindo, AdminBantuan, AdminAI, AdminWilayah } from './AdminPages';
 import { AdminKoordinator } from './AdminKoordinator';
 
 const NAV = [
-  { path: '', label: 'Command Center', icon: '📊' },
+  { path: 'home', label: 'Beranda', icon: '🏠' },
+  { path: 'dashboard', label: 'Command Center', icon: '📊' },
   { path: 'wilayah', label: 'Wilayah', icon: '🗺️' },
   { path: 'laporan', label: 'Laporan', icon: '📋' },
   { path: 'bantuan', label: 'Bantuan', icon: '🎁' },
@@ -47,7 +49,7 @@ export function AdminApp() {
             <NavLink
               key={item.path}
               to={`/admin/${item.path}`}
-              end={item.path === ''}
+              end={item.path === 'home'}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
                   isActive ? 'text-yellow-300' : 'text-blue-200 hover:text-white hover:bg-white/10'
@@ -111,14 +113,16 @@ export function AdminApp() {
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           <Routes>
-            <Route path="/" element={<AdminDashboard />} />
-            <Route path="/wilayah" element={<AdminWilayah />} />
-            <Route path="/koordinator" element={<AdminKoordinator />} />
-            <Route path="/warga" element={<AdminWarga />} />
-            <Route path="/laporan" element={<AdminLaporan />} />
-            <Route path="/bantuan" element={<AdminBantuan />} />
-            <Route path="/warmindo" element={<AdminWarmindo />} />
-            <Route path="/ai" element={<AdminAI />} />
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="home" element={<AdminHome />} />
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="wilayah" element={<AdminWilayah />} />
+            <Route path="koordinator" element={<AdminKoordinator />} />
+            <Route path="warga" element={<AdminWarga />} />
+            <Route path="laporan" element={<AdminLaporan />} />
+            <Route path="bantuan" element={<AdminBantuan />} />
+            <Route path="warmindo" element={<AdminWarmindo />} />
+            <Route path="ai" element={<AdminAI />} />
           </Routes>
         </main>
       </div>
