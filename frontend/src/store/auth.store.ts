@@ -1,6 +1,9 @@
 import { create } from 'zustand';
+import { AuthStorage, normalizeStoredUser, type StoredAuthUser } from '../lib/auth';
+import { prismaRoleToAccessRole } from '../lib/accessRoles';
+import { includesFieldRole, includesWarmindoRole } from '../lib/routePolicy';
 
-interface User { id:number; nama:string; email:string; role:string; rtId?:number; rwId?:number; kelurahanId?:number; kecamatanId?:number; }
+export type User = StoredAuthUser;
 
 interface AuthStore {
   user: User | null;
@@ -9,13 +12,34 @@ interface AuthStore {
   logout: () => void;
   isAdmin: () => boolean;
   isField: () => boolean;
+  isWarmindo: () => boolean;
 }
 
 export const useAuth = create<AuthStore>((set, get) => ({
-  user: (() => { try { return JSON.parse(localStorage.getItem('jakdata_user') ?? 'null'); } catch { return null; } })(),
-  token: localStorage.getItem('jakdata_token'),
-  login: (user, token) => { localStorage.setItem('jakdata_token', token); localStorage.setItem('jakdata_user', JSON.stringify(user)); set({ user, token }); },
-  logout: () => { localStorage.removeItem('jakdata_token'); localStorage.removeItem('jakdata_user'); set({ user: null, token: null }); },
-  isAdmin: () => get().user?.role === 'admin_pusat',
-  isField: () => ['petugas_lapangan','koordinator_rt','koordinator_rw'].includes(get().user?.role ?? ''),
+  user: AuthStorage.getUser(),
+  token: AuthStorage.getToken(),
+  login: (user: User, token: string) => {
+    const stored = normalizeStoredUser(user as unknown as Record<string, unknown>);
+    AuthStorage.save(token, stored);
+    localStorage.setItem('jakdata_role', prismaRoleToAccessRole(stored.role));
+    localStorage.setItem('jakdata_wilayah_id', stored.wilayahId != null ? String(stored.wilayahId) : '');
+    set({ user: stored, token });
+  },
+  logout: () => {
+    AuthStorage.clear();
+    set({ user: null, token: null });
+  },
+  isAdmin: () => {
+    const r = get().user?.role;
+    return (
+      r === 'admin_pusat' ||
+      r === 'admin_kota' ||
+      r === 'admin_kecamatan' ||
+      r === 'admin_kelurahan' ||
+      r === 'auditor' ||
+      r === 'finance_admin'
+    );
+  },
+  isField: () => includesFieldRole(get().user?.role),
+  isWarmindo: () => includesWarmindoRole(get().user?.role),
 }));

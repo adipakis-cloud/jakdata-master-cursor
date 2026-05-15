@@ -90,7 +90,7 @@ npx prisma db push
 
 If the database already has important data, prefer `prisma migrate`.
 
-## 6. Seed sample operational data
+## 6. Seed Data Awal Sistem (operasional)
 
 From `backend`:
 
@@ -100,11 +100,11 @@ npm run db:seed
 
 The default seed is idempotent and creates:
 
-- sample wilayah: DKI Jakarta -> Jakarta Barat -> Cengkareng -> Kapuk -> RW 001 -> RT 001/002
-- sample users
-- sample keluarga and warga
-- sample UMKM and Warmindo operational data
-- sample bantuan, laporan warga, and operational alerts
+- wilayah referensi: DKI Jakarta -> Jakarta Barat -> Cengkareng -> Kapuk -> RW 001 -> RT 001/002
+- pengguna operasional
+- keluarga dan warga
+- UMKM dan data operasional Warmindo
+- bantuan, laporan warga, dan peringatan operasional
 
 ## 7. Run backend locally
 

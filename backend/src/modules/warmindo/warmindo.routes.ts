@@ -1,14 +1,44 @@
-import { FastifyInstance } from 'fastify';
+import { FastifyInstance, FastifyReply } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { getPagination } from '../../lib/pagination';
+import { territoryScopeMiddleware } from '../../middleware/territoryScope.middleware';
+import { resolveVisibleRtIds } from '../security/security';
+import { registerWarmindoOperationalRoutes } from './warmindo.operational';
+
+function authScope(app: FastifyInstance) {
+  return [app.authenticate, territoryScopeMiddleware];
+}
+
+async function assertWarmindoOutletInScope(user: any, outletId: number, reply: FastifyReply) {
+  const where = await warmindoScope(user);
+  const outlet = await prisma.warmindoOutlet.findFirst({ where: { AND: [{ id: outletId }, where] } });
+  if (!outlet) {
+    reply.code(404).send({ error: 'Outlet tidak ditemukan atau di luar wilayah Anda.' });
+    return false;
+  }
+  return true;
+}
 
 export async function warmindoRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: [app.authenticate] }, async (req: any) => {
+  registerWarmindoOperationalRoutes(app);
+
+  app.get('/', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const where = await warmindoScope(req.user);
-    const outlets = await prisma.warmindoOutlet.findMany({
-      where,
-      include: { inventory: true, _count: { select: { transaksi: true } } },
-      orderBy: { kodeOutlet: 'asc' },
-    });
+    const { page, limit, skip } = getPagination(req.query);
+    const [outlets, total] = await Promise.all([
+      prisma.warmindoOutlet.findMany({
+        where,
+        include: { inventory: true, _count: { select: { transaksi: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      prisma.warmindoOutlet.count({ where }),
+    ]);
+    reply.header('x-total-count', String(total));
+    reply.header('x-page', String(page));
+    reply.header('x-limit', String(limit));
+    reply.header('x-total-pages', String(Math.max(1, Math.ceil(total / limit))));
 
     const today = startToday();
     return Promise.all(outlets.map(async (outlet) => {
@@ -33,7 +63,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
     }));
   });
 
-  app.get('/summary', { preHandler: [app.authenticate] }, async (req: any) => {
+  app.get('/summary', { preHandler: authScope(app) }, async (req: any) => {
     const where = await warmindoScope(req.user);
     const outlets = await prisma.warmindoOutlet.findMany({ where, select: { id: true, namaOutlet: true, kodeOutlet: true, status: true } });
     const outletIds = outlets.map(o => o.id);
@@ -64,8 +94,10 @@ export async function warmindoRoutes(app: FastifyInstance) {
     };
   });
 
-  app.get('/:id', { preHandler: [app.authenticate] }, async (req: any) => {
+  app.get('/:id', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    const ok = await assertWarmindoOutletInScope(req.user, id, reply);
+    if (!ok) return;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -95,7 +127,7 @@ export async function warmindoRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post('/', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+  app.post('/', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const b = req.body;
     const count = await prisma.warmindoOutlet.count();
     const kode = `WRM-${String(count + 1).padStart(3, '0')}`;
@@ -113,8 +145,10 @@ export async function warmindoRoutes(app: FastifyInstance) {
     return reply.code(201).send(outlet);
   });
 
-  app.post('/:id/transaksi', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+  app.post('/:id/transaksi', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    const ok = await assertWarmindoOutletInScope(req.user, id, reply);
+    if (!ok) return;
     const b = req.body;
     const omzet = Number(b.totalOmzet) || 0;
     const hpp = Number(b.totalHpp) || 0;
@@ -132,8 +166,10 @@ export async function warmindoRoutes(app: FastifyInstance) {
     return reply.code(201).send(trx);
   });
 
-  app.post('/:id/pengeluaran', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+  app.post('/:id/pengeluaran', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    const ok = await assertWarmindoOutletInScope(req.user, id, reply);
+    if (!ok) return;
     const b = req.body;
     const p = await prisma.warmindoPengeluaran.create({
       data: {
@@ -146,8 +182,10 @@ export async function warmindoRoutes(app: FastifyInstance) {
     return reply.code(201).send(p);
   });
 
-  app.post('/:id/inventory', { preHandler: [app.authenticate] }, async (req: any, reply: any) => {
+  app.post('/:id/inventory', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    const ok = await assertWarmindoOutletInScope(req.user, id, reply);
+    if (!ok) return;
     const b = req.body;
     const inv = await prisma.warmindoInventory.create({
       data: {
@@ -163,7 +201,10 @@ export async function warmindoRoutes(app: FastifyInstance) {
     return reply.code(201).send(inv);
   });
 
-  app.put('/:id/inventory/:invId', { preHandler: [app.authenticate] }, async (req: any) => {
+  app.put('/:id/inventory/:invId', { preHandler: authScope(app) }, async (req: any, reply: any) => {
+    const id = Number(req.params.id);
+    const ok = await assertWarmindoOutletInScope(req.user, id, reply);
+    if (!ok) return;
     const invId = Number(req.params.invId);
     const b = req.body;
     return prisma.warmindoInventory.update({
@@ -172,8 +213,10 @@ export async function warmindoRoutes(app: FastifyInstance) {
     });
   });
 
-  app.get('/:id/keuangan', { preHandler: [app.authenticate] }, async (req: any) => {
+  app.get('/:id/keuangan', { preHandler: authScope(app) }, async (req: any, reply: any) => {
     const id = Number(req.params.id);
+    const ok = await assertWarmindoOutletInScope(req.user, id, reply);
+    if (!ok) return;
     const now = new Date();
     const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -210,21 +253,17 @@ function startToday() {
 }
 
 async function warmindoScope(user: any) {
-  if (!user || ['admin_pusat','auditor','finance_admin'].includes(user.role)) return {};
-  if (['manager_warmindo','kasir_warmindo'].includes(user.role)) return user.warmindoId ? { id: user.warmindoId } : { id: -1 };
-  if (user.rtId) return { rtId: user.rtId };
-  if (user.kelurahanId) return { kelurahanId: user.kelurahanId };
-  if (user.rwId) {
-    const rts = await prisma.rT.findMany({ where: { rwId: user.rwId }, select: { id: true } });
-    return { rtId: { in: rts.map(rt => rt.id) } };
+  if (!user || ['admin_pusat', 'auditor', 'finance_admin'].includes(user.role)) return {};
+  if (['manager_warmindo', 'kasir_warmindo'].includes(user.role)) {
+    return user.warmindoId ? { id: user.warmindoId } : { id: -1 };
   }
-  if (user.kecamatanId) {
-    const rts = await prisma.rT.findMany({ where: { rw: { kelurahan: { kecamatanId: user.kecamatanId } } }, select: { id: true } });
-    return { rtId: { in: rts.map(rt => rt.id) } };
-  }
-  if (user.kotaId) {
-    const rts = await prisma.rT.findMany({ where: { rw: { kelurahan: { kecamatan: { kotaId: user.kotaId } } } }, select: { id: true } });
-    return { rtId: { in: rts.map(rt => rt.id) } };
-  }
-  return { id: -1 };
+  const rtIds = await resolveVisibleRtIds(user);
+  if (rtIds === null) return {};
+  if (rtIds.length === 0) return { id: -1 };
+  const kelRows = await prisma.rT.findMany({
+    where: { id: { in: rtIds } },
+    select: { rw: { select: { kelurahanId: true } } },
+  });
+  const kelIds = [...new Set(kelRows.map((r) => r.rw.kelurahanId))];
+  return { OR: [{ rtId: { in: rtIds } }, { kelurahanId: { in: kelIds } }] };
 }

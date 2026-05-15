@@ -3,4 +3,7 @@ dist/
 .env
 .env.*
 !.env.example
+!backend/.env.production.example
 uploads/
+backup/
+*.sql.gz

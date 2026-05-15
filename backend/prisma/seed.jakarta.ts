@@ -1,12 +1,28 @@
 // ================================================================
 // JAKDATA — Production Seed Jakarta
 // Hanya struktur wilayah + admin user
-// Tidak ada data demo/sample
+// Tanpa Data Awal Sistem tambahan
 // ================================================================
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { withPrismaPoolParams } from '../src/config/dbUrl';
 
-const prisma = new PrismaClient();
+const rawDb = process.env.DATABASE_URL;
+const prisma = new PrismaClient(
+  rawDb
+    ? {
+        datasources: {
+          db: {
+            url: withPrismaPoolParams(rawDb, {
+              connectionLimit: 1,
+              poolTimeoutSec: 120,
+              suggestPgBouncer: true,
+            }),
+          },
+        },
+      }
+    : undefined,
+);
 const pad = (n: number, l = 3) => String(n).padStart(l, '0');
 
 const JAKARTA: Record<string, { kode: string; tipe?: string; kecamatan: Record<string, string[]> }> = {
@@ -20,7 +36,7 @@ const JAKARTA: Record<string, { kode: string; tipe?: string; kecamatan: Record<s
 
 async function main() {
   console.log('🌱 JAKDATA Production Seed — Wilayah Jakarta Lengkap');
-  console.log('⚠️  Mode: PRODUCTION — tidak ada data demo\n');
+  console.log('⚠️  Mode: PRODUCTION — tanpa seed Data Awal Sistem tambahan\n');
 
   const dki = await prisma.provinsi.upsert({ where: { kode: 'DKI' }, update: {}, create: { nama: 'DKI Jakarta', kode: 'DKI' } });
 
@@ -53,7 +69,7 @@ async function main() {
 
   console.log(`✅ ${ktCount} kota | ${kecCount} kecamatan | ${kelCount} kelurahan | ${rwCount} RW | ${rtCount} RT`);
 
-  // Admin user saja — tidak ada demo user
+  // Hanya admin — tanpa pengguna operasional seed
   const adminHash = await bcrypt.hash(process.env.ADMIN_PASSWORD ?? 'GANTI_PASSWORD_INI', 12);
   await prisma.user.upsert({
     where: { email: process.env.ADMIN_EMAIL ?? 'admin@jakdata.id' },

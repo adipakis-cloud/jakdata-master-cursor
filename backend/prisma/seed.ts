@@ -1,8 +1,51 @@
 import { PrismaClient, UserRole, StatusEkonomi, WarmindoStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { withPrismaPoolParams } from '../src/config/dbUrl';
 
-const prisma = new PrismaClient();
-const DEMO_PASSWORD = 'admin123';
+const rawDb = process.env.DATABASE_URL;
+const prisma = new PrismaClient(
+  rawDb
+    ? {
+        datasources: {
+          db: {
+            url: withPrismaPoolParams(rawDb, {
+              connectionLimit: 1,
+              poolTimeoutSec: 120,
+              suggestPgBouncer: true,
+            }),
+          },
+        },
+      }
+    : undefined,
+);
+const SEED_DEFAULT_PASSWORD = 'admin123';
+
+/** Supabase pooler: retry transient disconnects (P1017, etc.). */
+async function withDbRetry<T>(label: string, fn: () => Promise<T>, retries = 5): Promise<T> {
+  let last: unknown;
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      last = e;
+      const code = e?.code as string | undefined;
+      const msg = String(e?.message ?? '');
+      const transient =
+        code === 'P1017' ||
+        code === 'P1001' ||
+        code === 'P1014' ||
+        msg.includes('Server has closed the connection') ||
+        msg.includes('Connection terminated') ||
+        msg.includes('ECONNRESET') ||
+        msg.includes('ETIMEDOUT');
+      if (!transient || attempt === retries) throw e;
+      const delay = 250 * attempt;
+      console.warn(`[seed] ${label}: transient ${code ?? msg.slice(0, 40)} — retry ${attempt + 1}/${retries} in ${delay}ms`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw last;
+}
 
 type Risk = 'high' | 'medium' | 'low';
 
@@ -46,7 +89,7 @@ async function upsertUser(data: {
   rtId?: number | null;
   warmindoId?: number | null;
 }) {
-  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
+  const passwordHash = await bcrypt.hash(SEED_DEFAULT_PASSWORD, 10);
   return prisma.user.upsert({
     where: { email: data.email },
     update: {
@@ -80,6 +123,11 @@ async function upsertUser(data: {
 }
 
 async function seedWilayah() {
+  const mode = (process.env.SEED_MODE ?? 'medium').toLowerCase();
+  const rwCap = Math.max(1, Math.min(50, Number(process.env.SEED_RW_CAP ?? (mode === 'small' ? 1 : mode === 'production' ? 3 : 2))));
+  const rtCap = Math.max(1, Math.min(80, Number(process.env.SEED_RT_CAP ?? (mode === 'small' ? 2 : mode === 'production' ? 4 : 3))));
+  console.log(`[seed] seedWilayah: SEED_MODE=${mode} rwCap=${rwCap} rtCap=${rtCap}`);
+
   const provinsi = await prisma.provinsi.upsert({
     where: { kode: 'DKI' },
     update: { nama: 'DKI Jakarta' },
@@ -118,6 +166,56 @@ async function seedWilayah() {
       risk: 'low' as Risk,
     },
     {
+      kota: 'Jakarta Pusat',
+      kodeKota: 'JAKPUS',
+      kecamatan: 'Menteng',
+      kodeKecamatan: 'MTG',
+      kelurahan: 'Gondangdia',
+      kodeKelurahan: 'GND',
+      kodePos: '10350',
+      risk: 'low' as Risk,
+    },
+    {
+      kota: 'Jakarta Utara',
+      kodeKota: 'JAKUT',
+      kecamatan: 'Kelapa Gading',
+      kodeKecamatan: 'KGD',
+      kelurahan: 'Kelapa Gading Timur',
+      kodeKelurahan: 'KGT',
+      kodePos: '14240',
+      risk: 'medium' as Risk,
+    },
+    {
+      kota: 'Jakarta Utara',
+      kodeKota: 'JAKUT',
+      kecamatan: 'Tanjung Priok',
+      kodeKecamatan: 'TPK',
+      kelurahan: 'Sunter Jaya',
+      kodeKelurahan: 'SNJ',
+      kodePos: '14360',
+      risk: 'high' as Risk,
+    },
+    {
+      kota: 'Jakarta Selatan',
+      kodeKota: 'JAKSEL',
+      kecamatan: 'Kebayoran Baru',
+      kodeKecamatan: 'KYB',
+      kelurahan: 'Melawai',
+      kodeKelurahan: 'MLW',
+      kodePos: '12160',
+      risk: 'low' as Risk,
+    },
+    {
+      kota: 'Jakarta Timur',
+      kodeKota: 'JAKTIM',
+      kecamatan: 'Matraman',
+      kodeKecamatan: 'MTR',
+      kelurahan: 'Palmeriam',
+      kodeKelurahan: 'PLM',
+      kodePos: '13140',
+      risk: 'medium' as Risk,
+    },
+    {
       kota: 'Jakarta Timur',
       kodeKota: 'JAKTIM',
       kecamatan: 'Duren Sawit',
@@ -129,9 +227,11 @@ async function seedWilayah() {
     },
   ];
 
+  const specsEffective = mode === 'small' ? specs.slice(0, 2) : specs;
+
   const wilayah: WilayahSeed[] = [];
 
-  for (const spec of specs) {
+  for (const spec of specsEffective) {
     const kota = await prisma.kota.upsert({
       where: { kode: spec.kodeKota },
       update: { nama: spec.kota, tipe: 'kota' },
@@ -157,7 +257,7 @@ async function seedWilayah() {
 
     const rws = [];
     const rts = [];
-    for (let rwNumber = 1; rwNumber <= 2; rwNumber++) {
+    for (let rwNumber = 1; rwNumber <= rwCap; rwNumber++) {
       const rw = await prisma.rW.upsert({
         where: { kelurahanId_nomor: { kelurahanId: kelurahan.id, nomor: pad(rwNumber) } },
         update: {
@@ -173,7 +273,7 @@ async function seedWilayah() {
       });
       rws.push({ id: rw.id, nomor: rw.nomor });
 
-      for (let rtNumber = 1; rtNumber <= 3; rtNumber++) {
+      for (let rtNumber = 1; rtNumber <= rtCap; rtNumber++) {
         const rt = await prisma.rT.upsert({
           where: { rwId_nomor: { rwId: rw.id, nomor: pad(rtNumber) } },
           update: {
@@ -239,62 +339,39 @@ function familyProfile(risk: Risk, index: number) {
   };
 }
 
-async function upsertWarga(data: {
-  nikHash: string;
-  rtId: number;
-  kkId: number;
-  nama: string;
-  noHp?: string;
-  jenisKelamin: 'L' | 'P';
-  tanggalLahir: Date;
-  pekerjaan: string;
-  penghasilanEst: number;
-  statusEkonomi: StatusEkonomi;
-  kemampuanKerja: boolean;
-  kebutuhanKhusus?: string | null;
-  kategori: string;
-  alamat: string;
-  catatan: string;
-  createdBy: number;
-}) {
-  const existing = await prisma.warga.findFirst({ where: { nikHash: data.nikHash } });
-  if (existing) {
-    return prisma.warga.update({
-      where: { id: existing.id },
-      data: {
-        rtId: data.rtId,
-        kkId: data.kkId,
-        nama: data.nama,
-        noHp: data.noHp,
-        jenisKelamin: data.jenisKelamin,
-        tanggalLahir: data.tanggalLahir,
-        pekerjaan: data.pekerjaan,
-        penghasilanEst: data.penghasilanEst,
-        statusEkonomi: data.statusEkonomi,
-        kemampuanKerja: data.kemampuanKerja,
-        kebutuhanKhusus: data.kebutuhanKhusus,
-        kategori: data.kategori,
-        alamat: data.alamat,
-        catatan: data.catatan,
-        diverifikasi: true,
-      },
-    });
-  }
-
-  return prisma.warga.create({ data: { ...data, diverifikasi: true } });
-}
-
 async function seedPopulation(wilayah: WilayahSeed[], createdBy: number) {
+  const mode = (process.env.SEED_MODE ?? 'medium').toLowerCase();
+  const defaultCap = mode === 'small' ? 80 : mode === 'production' ? 5000 : 320;
+  const WARGA_CAP = Math.max(10, Math.min(500_000, Number(process.env.SEED_WARGA_CAP ?? defaultCap)));
+  const BATCH = 40;
+  const wargaBuffer: Array<Record<string, unknown>> = [];
+
+  const flushWargaBuffer = async () => {
+    if (!wargaBuffer.length) return;
+    const slice = wargaBuffer.splice(0, wargaBuffer.length);
+    const hashes = slice.map((r) => r.nikHash as string);
+    const existing = await withDbRetry('warga.findMany(nikHash)', () =>
+      prisma.warga.findMany({ where: { nikHash: { in: hashes } }, select: { nikHash: true } }),
+    );
+    const have = new Set(existing.map((e) => e.nikHash).filter(Boolean) as string[]);
+    const data = slice.filter((r) => !have.has(r.nikHash as string)).map((r) => ({ ...r, diverifikasi: true }));
+    if (!data.length) return;
+    await withDbRetry('warga.createMany', () => prisma.warga.createMany({ data: data as any[] }));
+  };
+
+  console.log(`[seed] seedPopulation: start (SEED_MODE=${mode}, warga cap=${WARGA_CAP}, batch=${BATCH})`);
+
   const firstNames = ['Ahmad', 'Siti', 'Budi', 'Dewi', 'Hendra', 'Rina', 'Joko', 'Nur', 'Agus', 'Fitri', 'Rudi', 'Yanti', 'Doni', 'Maya', 'Rahmat', 'Lina'];
   const lastNames = ['Fauzi', 'Rahayu', 'Santoso', 'Lestari', 'Saputra', 'Wulandari', 'Pratama', 'Hasanah', 'Purnomo', 'Maulana'];
   const families: FamilySeed[] = [];
   let familySeq = 1;
   let wargaSeq = 1;
+  let capped = false;
 
-  for (const area of wilayah) {
+  outer: for (const area of wilayah) {
     for (let rtIndex = 0; rtIndex < area.rts.length; rtIndex++) {
       const rt = area.rts[rtIndex];
-      const familyCount = rt.risk === 'high' ? [7, 9, 5, 8, 6, 4][rtIndex] : rt.risk === 'medium' ? [5, 6, 4, 5, 3, 6][rtIndex] : [4, 3, 5, 2, 4, 3][rtIndex];
+      const familyCount = rt.risk === 'high' ? [3, 4, 2, 3, 2, 2][rtIndex] : rt.risk === 'medium' ? [2, 3, 2, 3, 2, 2][rtIndex] : [2, 2, 2, 2, 2, 2][rtIndex];
 
       for (let i = 0; i < familyCount; i++) {
         const profile = familyProfile(rt.risk, familySeq + i);
@@ -303,7 +380,8 @@ async function seedPopulation(wilayah: WilayahSeed[], createdBy: number) {
         const repeatAid = rt.risk === 'high' && i === 0;
         const neverAid = rt.risk === 'high' && i === familyCount - 1;
 
-        const keluarga = await prisma.keluarga.upsert({
+        const keluarga = await withDbRetry(`keluarga.upsert(${noKk})`, () =>
+          prisma.keluarga.upsert({
           where: { noKk },
           update: {
             rtId: rt.id,
@@ -334,7 +412,7 @@ async function seedPopulation(wilayah: WilayahSeed[], createdBy: number) {
             terdaftarProgram: repeatAid ? ['sembako', 'tunai', 'kesehatan'] : neverAid ? [] : profile.score >= 65 ? ['sembako'] : [],
             catatan: `seed=population; wilayah=${rt.label}; povertyRisk=${rt.risk}; housing=${profile.statusRumah}; repeatAid=${repeatAid}; neverAid=${neverAid}`,
           },
-        });
+        }));
 
         families.push({
           id: keluarga.id,
@@ -349,6 +427,10 @@ async function seedPopulation(wilayah: WilayahSeed[], createdBy: number) {
         });
 
         for (let member = 0; member < profile.anggota; member++) {
+          if (wargaSeq > WARGA_CAP) {
+            capped = true;
+            break outer;
+          }
           const isKepala = member === 0;
           const isPregnant = member === 1 && familySeq % 7 === 0;
           const isElderly = member === profile.anggota - 1 && familySeq % 5 === 0;
@@ -377,7 +459,7 @@ async function seedPopulation(wilayah: WilayahSeed[], createdBy: number) {
                     ? 'penerima_bantuan'
                     : 'warga_biasa';
 
-          await upsertWarga({
+          wargaBuffer.push({
             nikHash: `seed-nik-${pad(wargaSeq, 6)}`,
             rtId: rt.id,
             kkId: keluarga.id,
@@ -399,13 +481,24 @@ async function seedPopulation(wilayah: WilayahSeed[], createdBy: number) {
             catatan: `seed=population; pendidikan=${education}; bpjs=${bpjs}; kesehatan=${health}; povertyRisk=${rt.risk}; unemployment=${unemployed}; housing=${profile.statusRumah}; aidPriorityScore=${profile.score}`,
             createdBy,
           });
+          if (wargaBuffer.length >= BATCH) {
+            await flushWargaBuffer();
+            console.log(`[seed] seedPopulation: flushed warga batch (progress wargaSeq=${wargaSeq})`);
+          }
           wargaSeq++;
+          if (wargaSeq % 500 === 0 || wargaSeq === 2) {
+            console.log(`[seed] seedPopulation: warga progress ${wargaSeq - 1}/${WARGA_CAP} (families=${families.length})`);
+            await new Promise((r) => setTimeout(r, 25));
+          }
         }
         familySeq++;
       }
     }
   }
 
+  if (capped) console.log(`[seed] seedPopulation: stopped at warga cap ${WARGA_CAP}`);
+  await flushWargaBuffer();
+  console.log(`[seed] seedPopulation: done (families=${families.length}, wargaSeq=${wargaSeq - 1})`);
   return families;
 }
 
@@ -460,12 +553,14 @@ async function upsertWarmindoExpense(warmindoId: number, tanggal: Date, kategori
 
 async function seedWarmindo(wilayah: WilayahSeed[]) {
   const outlets: { id: number; kodeOutlet: string; namaOutlet: string }[] = [];
+  const areaByKel = new Map(wilayah.map((w) => [w.kelurahan.nama, w]));
+  const ar = (nama: string) => areaByKel.get(nama) ?? wilayah[0];
   const outletSpecs = [
-    { kode: 'WRM-KPK-001', nama: 'Warmindo Kapuk Produktif', area: wilayah[0], status: 'aktif' as WarmindoStatus, anomaly: 'low_stock' },
-    { kode: 'WRM-ANG-001', nama: 'Warmindo Angke Tangguh', area: wilayah[1], status: 'aktif' as WarmindoStatus, anomaly: 'high_expense' },
-    { kode: 'WRM-TBB-001', nama: 'Warmindo Tebet Barat Sehat', area: wilayah[2], status: 'aktif' as WarmindoStatus, anomaly: 'normal' },
-    { kode: 'WRM-PDB-001', nama: 'Warmindo Pondok Bambu Ramai', area: wilayah[3], status: 'aktif' as WarmindoStatus, anomaly: 'overload' },
-    { kode: 'WRM-KPK-002', nama: 'Warmindo Kapuk Persiapan', area: wilayah[0], status: 'persiapan' as WarmindoStatus, anomaly: 'opening' },
+    { kode: 'WRM-KPK-001', nama: 'Warmindo Kapuk Produktif', area: ar('Kapuk'), status: 'aktif' as WarmindoStatus, anomaly: 'low_stock' },
+    { kode: 'WRM-ANG-001', nama: 'Warmindo Angke Tangguh', area: ar('Angke'), status: 'aktif' as WarmindoStatus, anomaly: 'high_expense' },
+    { kode: 'WRM-TBB-001', nama: 'Warmindo Tebet Barat Sehat', area: ar('Tebet Barat'), status: 'aktif' as WarmindoStatus, anomaly: 'normal' },
+    { kode: 'WRM-PDB-001', nama: 'Warmindo Pondok Bambu Ramai', area: ar('Pondok Bambu'), status: 'aktif' as WarmindoStatus, anomaly: 'overload' },
+    { kode: 'WRM-KPK-002', nama: 'Warmindo Kapuk Persiapan', area: ar('Kapuk'), status: 'persiapan' as WarmindoStatus, anomaly: 'opening' },
   ];
 
   for (let i = 0; i < outletSpecs.length; i++) {
@@ -701,10 +796,14 @@ async function seedWarmindoFieldOps(outlets: { id: number; kodeOutlet: string; n
       const tanggal = startOfDay(day, 0);
       const dayStart = startOfDay(day, 0);
       const nextDay = startOfDay(day + 1, 0);
-      const [sales, expenseAgg] = await Promise.all([
-        prisma.warmindoTransaksi.aggregate({ where: { warmindoId: outlet.id, tanggal: { gte: dayStart, lt: nextDay } }, _sum: { totalOmzet: true, grossProfit: true } }),
-        prisma.warmindoPengeluaran.aggregate({ where: { warmindoId: outlet.id, tanggal: { gte: dayStart, lt: nextDay } }, _sum: { jumlah: true } }),
-      ]);
+      const sales = await prisma.warmindoTransaksi.aggregate({
+        where: { warmindoId: outlet.id, tanggal: { gte: dayStart, lt: nextDay } },
+        _sum: { totalOmzet: true, grossProfit: true },
+      });
+      const expenseAgg = await prisma.warmindoPengeluaran.aggregate({
+        where: { warmindoId: outlet.id, tanggal: { gte: dayStart, lt: nextDay } },
+        _sum: { jumlah: true },
+      });
       const totalSales = sales._sum.totalOmzet ?? 0;
       const totalExpenses = expenseAgg._sum.jumlah ?? 0;
       const variance = outletIndex === 1 && day === 0 ? -75000 : outletIndex === 3 && day === -1 ? -125000 : 0;
@@ -821,20 +920,44 @@ async function seedWarmindoFieldOps(outlets: { id: number; kodeOutlet: string; n
 }
 
 async function seedRoleUsers(wilayah: WilayahSeed[], outlets: { id: number }[]) {
-  const jakartaBarat = wilayah[0];
-  const admin = await upsertUser({ email: 'admin@jakdata.id', nama: 'Administrator JAKDATA', role: 'admin_pusat' });
+  const jakartaBarat =
+    wilayah.find((w) => w.kelurahan.nama === 'Kapuk' && w.kecamatan.nama === 'Cengkareng') ?? wilayah[0];
   await upsertUser({ email: 'admin.kota@jakdata.id', nama: 'Admin Kota Jakarta Barat', role: 'admin_kota', kotaId: jakartaBarat.kota.id });
   await upsertUser({ email: 'admin.kecamatan@jakdata.id', nama: 'Admin Kecamatan Cengkareng', role: 'admin_kecamatan', kecamatanId: jakartaBarat.kecamatan.id });
   await upsertUser({ email: 'admin.kelurahan@jakdata.id', nama: 'Admin Kelurahan Kapuk', role: 'admin_kelurahan', kelurahanId: jakartaBarat.kelurahan.id });
-  await upsertUser({ email: 'koordinator.rw001@jakdata.id', nama: 'Koordinator RW 001 Kapuk', role: 'koordinator_rw', rwId: jakartaBarat.rws[0].id });
-  await upsertUser({ email: 'petugas.rt001@jakdata.id', nama: 'Petugas RT 001 Kapuk', role: 'petugas_lapangan', rtId: jakartaBarat.rts[0].id });
+  await upsertUser({ email: 'koordinator.kecamatan@jakdata.id', nama: 'Koordinator Kecamatan Cengkareng', role: 'koordinator_kecamatan', kecamatanId: jakartaBarat.kecamatan.id });
+  await upsertUser({ email: 'koordinator.kelurahan@jakdata.id', nama: 'Koordinator Kelurahan Kapuk', role: 'koordinator_kelurahan', kelurahanId: jakartaBarat.kelurahan.id });
+  await upsertUser({ email: 'koordinator.rw@jakdata.id', nama: 'Koordinator RW Kapuk', role: 'koordinator_rw', rwId: jakartaBarat.rws[0].id, kelurahanId: jakartaBarat.kelurahan.id, kecamatanId: jakartaBarat.kecamatan.id });
+  await upsertUser({
+    email: 'koordinator.rt@jakdata.id',
+    nama: 'Koordinator RT Kapuk',
+    role: 'koordinator_rt',
+    rtId: jakartaBarat.rts[0].id,
+    rwId: jakartaBarat.rws[0].id,
+    kelurahanId: jakartaBarat.kelurahan.id,
+    kecamatanId: jakartaBarat.kecamatan.id,
+  });
+  await upsertUser({
+    email: 'petugas@jakdata.id',
+    nama: 'Petugas Lapangan Kapuk',
+    role: 'petugas_lapangan',
+    rtId: jakartaBarat.rts[0].id,
+    rwId: jakartaBarat.rws[0].id,
+    kelurahanId: jakartaBarat.kelurahan.id,
+    kecamatanId: jakartaBarat.kecamatan.id,
+  });
   await upsertUser({ email: 'auditor@jakdata.id', nama: 'Auditor JAKDATA', role: 'auditor' });
   await upsertUser({ email: 'finance@jakdata.id', nama: 'Finance Admin JAKDATA', role: 'finance_admin' });
-  const manager = await upsertUser({ email: 'manager.warmindo@jakdata.id', nama: 'Manager Warmindo Kapuk', role: 'manager_warmindo', kelurahanId: jakartaBarat.kelurahan.id, warmindoId: outlets[0].id });
+  const warmindoOp = await upsertUser({
+    email: 'warmindo@jakdata.id',
+    nama: 'Operator Warmindo Kapuk',
+    role: 'manager_warmindo',
+    kelurahanId: jakartaBarat.kelurahan.id,
+    warmindoId: outlets[0].id,
+  });
   await upsertUser({ email: 'kasir.warmindo@jakdata.id', nama: 'Kasir Warmindo Kapuk', role: 'kasir_warmindo', warmindoId: outlets[0].id });
 
-  await prisma.warmindoOutlet.update({ where: { id: outlets[0].id }, data: { managerUserId: manager.id } });
-  return admin;
+  await prisma.warmindoOutlet.update({ where: { id: outlets[0].id }, data: { managerUserId: warmindoOp.id } });
 }
 
 async function upsertBantuanByName(data: any) {
@@ -859,12 +982,16 @@ async function upsertAidRecipient(data: {
 }
 
 async function seedAidAndFairness(families: FamilySeed[], createdBy: number) {
-  const programs = await Promise.all([
-    upsertBantuanByName({ nama: 'Sembako Prioritas 2026', tipe: 'sembako', deskripsi: 'Beras, minyak, gula, protein', satuan: 'paket', nilaiPerSatuan: 180000, stokTotal: 240, stokTersisa: 161, sumber: 'APBD Sosial', tanggalMasuk: startOfDay(-25), aktif: true }),
-    upsertBantuanByName({ nama: 'Bantuan Tunai Rentan', tipe: 'uang_tunai', deskripsi: 'Tunai keluarga rentan', satuan: 'orang', nilaiPerSatuan: 500000, stokTotal: 80, stokTersisa: 44, sumber: 'Dana Sosial', tanggalMasuk: startOfDay(-20), aktif: true }),
-    upsertBantuanByName({ nama: 'Dukungan Ibu Hamil dan Balita', tipe: 'kesehatan', deskripsi: 'Nutrisi, vitamin, rujukan puskesmas', satuan: 'paket', nilaiPerSatuan: 260000, stokTotal: 60, stokTersisa: 39, sumber: 'Program Kesehatan', tanggalMasuk: startOfDay(-18), aktif: true }),
-    upsertBantuanByName({ nama: 'Modal Mikro UMKM Warga', tipe: 'modal', deskripsi: 'Dukungan alat dan bahan usaha mikro', satuan: 'paket', nilaiPerSatuan: 1000000, stokTotal: 25, stokTersisa: 12, sumber: 'Ekonomi Produktif', tanggalMasuk: startOfDay(-14), aktif: true }),
-  ]);
+  const programDefs = [
+    { nama: 'Sembako Prioritas 2026', tipe: 'sembako', deskripsi: 'Beras, minyak, gula, protein', satuan: 'paket', nilaiPerSatuan: 180000, stokTotal: 240, stokTersisa: 161, sumber: 'APBD Sosial', tanggalMasuk: startOfDay(-25), aktif: true },
+    { nama: 'Bantuan Tunai Rentan', tipe: 'uang_tunai', deskripsi: 'Tunai keluarga rentan', satuan: 'orang', nilaiPerSatuan: 500000, stokTotal: 80, stokTersisa: 44, sumber: 'Dana Sosial', tanggalMasuk: startOfDay(-20), aktif: true },
+    { nama: 'Dukungan Ibu Hamil dan Balita', tipe: 'kesehatan', deskripsi: 'Nutrisi, vitamin, rujukan puskesmas', satuan: 'paket', nilaiPerSatuan: 260000, stokTotal: 60, stokTersisa: 39, sumber: 'Program Kesehatan', tanggalMasuk: startOfDay(-18), aktif: true },
+    { nama: 'Modal Mikro UMKM Warga', tipe: 'modal', deskripsi: 'Dukungan alat dan bahan usaha mikro', satuan: 'paket', nilaiPerSatuan: 1000000, stokTotal: 25, stokTersisa: 12, sumber: 'Ekonomi Produktif', tanggalMasuk: startOfDay(-14), aktif: true },
+  ];
+  const programs = [];
+  for (const def of programDefs) {
+    programs.push(await upsertBantuanByName(def));
+  }
 
   const repeated = families.filter((family) => family.repeatAid).slice(0, 4);
   const regular = families.filter((family) => family.score >= 65 && !family.neverAid).slice(0, 24);
@@ -982,19 +1109,20 @@ async function seedAidAndFairness(families: FamilySeed[], createdBy: number) {
 }
 
 async function seedReports(wilayah: WilayahSeed[], createdBy: number) {
+  const a = (i: number) => wilayah[Math.min(i, wilayah.length - 1)];
   const reportSpecs = [
-    ['JAK-2026-OPS-001', wilayah[0], 0, 'banjir', 'bencana', 'critical', 'eskalasi', 'Genangan 60 cm masuk rumah warga dan balita perlu evakuasi.', -1, null],
-    ['JAK-2026-OPS-002', wilayah[1], 2, 'lansia_terlantar', 'sosial', 'critical', 'diproses', 'Lansia tinggal sendiri belum makan dua hari.', 0, null],
-    ['JAK-2026-OPS-003', wilayah[0], 1, 'pengangguran', 'ekonomi', 'high', 'baru', 'PHK massal di kontrakan padat, lima KK kehilangan penghasilan.', 0, null],
-    ['JAK-2026-OPS-004', wilayah[2], 0, 'jalan_rusak', 'infrastruktur', 'medium', 'selesai', 'Lubang jalan dekat sekolah sudah ditutup sementara.', -5, -2],
-    ['JAK-2026-OPS-005', wilayah[3], 3, 'drainase', 'infrastruktur', 'high', 'menunggu_data', 'Saluran mampet menyebabkan air balik saat hujan.', -2, null],
-    ['JAK-2026-OPS-006', wilayah[1], 4, 'bantuan_belum_terima', 'bantuan', 'high', 'baru', 'Keluarga prioritas belum menerima sembako dua periode.', 0, null],
-    ['JAK-2026-OPS-007', wilayah[2], 2, 'posyandu', 'kesehatan', 'low', 'selesai', 'Permintaan jadwal posyandu tambahan telah difasilitasi.', -7, -6],
-    ['JAK-2026-OPS-008', wilayah[0], 5, 'anak_putus_sekolah', 'pendidikan', 'high', 'diproses', 'Anak SMP berhenti sekolah karena biaya transport.', -3, null],
-    ['JAK-2026-OPS-009', wilayah[3], 5, 'umkm_turun', 'ekonomi', 'medium', 'diproses', 'Omzet UMKM warung turun setelah harga bahan naik.', -1, null],
-    ['JAK-2026-OPS-010', wilayah[1], 1, 'rumah_tidak_layak', 'sosial', 'critical', 'baru', 'Atap kontrakan rubuh, ada penyandang disabilitas.', 0, null],
-    ['JAK-2026-OPS-011', wilayah[2], 4, 'aspirasi_warga', 'sosial', 'low', 'selesai', 'Permintaan kegiatan warga selesai ditindaklanjuti.', -12, -10],
-    ['JAK-2026-OPS-012', wilayah[3], 0, 'ibu_hamil', 'kesehatan', 'high', 'selesai', 'Ibu hamil risiko tinggi sudah dirujuk puskesmas.', -4, -1],
+    ['JAK-2026-OPS-001', a(0), 0, 'banjir', 'bencana', 'critical', 'eskalasi', 'Genangan 60 cm masuk rumah warga dan balita perlu evakuasi.', -1, null],
+    ['JAK-2026-OPS-002', a(1), 2, 'lansia_terlantar', 'sosial', 'critical', 'diproses', 'Lansia tinggal sendiri belum makan dua hari.', 0, null],
+    ['JAK-2026-OPS-003', a(0), 1, 'pengangguran', 'ekonomi', 'high', 'baru', 'PHK massal di kontrakan padat, lima KK kehilangan penghasilan.', 0, null],
+    ['JAK-2026-OPS-004', a(2), 0, 'jalan_rusak', 'infrastruktur', 'medium', 'selesai', 'Lubang jalan dekat sekolah sudah ditutup sementara.', -5, -2],
+    ['JAK-2026-OPS-005', a(3), 3, 'drainase', 'infrastruktur', 'high', 'menunggu_data', 'Saluran mampet menyebabkan air balik saat hujan.', -2, null],
+    ['JAK-2026-OPS-006', a(1), 4, 'bantuan_belum_terima', 'bantuan', 'high', 'baru', 'Keluarga prioritas belum menerima sembako dua periode.', 0, null],
+    ['JAK-2026-OPS-007', a(2), 2, 'posyandu', 'kesehatan', 'low', 'selesai', 'Permintaan jadwal posyandu tambahan telah difasilitasi.', -7, -6],
+    ['JAK-2026-OPS-008', a(0), 5, 'anak_putus_sekolah', 'pendidikan', 'high', 'diproses', 'Anak SMP berhenti sekolah karena biaya transport.', -3, null],
+    ['JAK-2026-OPS-009', a(3), 5, 'umkm_turun', 'ekonomi', 'medium', 'diproses', 'Omzet UMKM warung turun setelah harga bahan naik.', -1, null],
+    ['JAK-2026-OPS-010', a(1), 1, 'rumah_tidak_layak', 'sosial', 'critical', 'baru', 'Atap kontrakan rubuh, ada penyandang disabilitas.', 0, null],
+    ['JAK-2026-OPS-011', a(2), 4, 'aspirasi_warga', 'sosial', 'low', 'selesai', 'Permintaan kegiatan warga selesai ditindaklanjuti.', -12, -10],
+    ['JAK-2026-OPS-012', a(3), 0, 'ibu_hamil', 'kesehatan', 'high', 'selesai', 'Ibu hamil risiko tinggi sudah dirujuk puskesmas.', -4, -1],
   ] as const;
 
   for (const [kode, area, rtOffset, subkategori, kategori, urgency, status, isi, createdOffset, resolvedOffset] of reportSpecs) {
@@ -1472,48 +1600,103 @@ async function seedOfficialProfile() {
 }
 
 async function printCounts() {
-  const [users, families, warga, warmindo, reports, aidRecords, aiTasks, aiReports, alerts, products, saleLines, attendance, fairness, territories, aiMemory] = await Promise.all([
-    prisma.user.count(),
-    prisma.keluarga.count(),
-    prisma.warga.count(),
-    prisma.warmindoOutlet.count(),
-    prisma.laporanWarga.count(),
-    prisma.bantuanPenerima.count(),
-    prisma.aiTask.count(),
-    prisma.aiReport.count(),
-    prisma.operationalAlert.count(),
-    (prisma as any).warmindoProduct.count(),
-    (prisma as any).warmindoSaleLineItem.count(),
-    (prisma as any).warmindoAttendance.count(),
-    (prisma as any).bantuanFairnessSnapshot.count(),
-    (prisma as any).territorialStressSignal.count(),
-    (prisma as any).aIRecommendation.count(),
-  ]);
+  console.log('[seed] printCounts: start (sequential, one query at a time)');
+  const run = async (label: string, fn: () => Promise<number>) => {
+    process.stdout.write(`[seed] count ${label}... `);
+    const n = await fn();
+    console.log(n);
+    return n;
+  };
 
-  console.log('Seed counts:');
-  console.log(JSON.stringify({ users, families, warga, warmindoOutlets: warmindo, warmindoProducts: products, saleLines, attendance, reports, aidRecords, fairnessSnapshots: fairness, territorialSignals: territories, aiRecords: aiTasks + aiReports + aiMemory, operationalAlerts: alerts }, null, 2));
+  const users = await run('user', () => prisma.user.count());
+  const families = await run('keluarga', () => prisma.keluarga.count());
+  const warga = await run('warga', () => prisma.warga.count());
+  const warmindo = await run('warmindoOutlet', () => prisma.warmindoOutlet.count());
+  const reports = await run('laporanWarga', () => prisma.laporanWarga.count());
+  const aidRecords = await run('bantuanPenerima', () => prisma.bantuanPenerima.count());
+  const aiTasks = await run('aiTask', () => prisma.aiTask.count());
+  const aiReports = await run('aiReport', () => prisma.aiReport.count());
+  const alerts = await run('operationalAlert', () => prisma.operationalAlert.count());
+  const products = await run('warmindoProduct', () => (prisma as any).warmindoProduct.count());
+  const saleLines = await run('warmindoSaleLineItem', () => (prisma as any).warmindoSaleLineItem.count());
+  const attendance = await run('warmindoAttendance', () => (prisma as any).warmindoAttendance.count());
+  const fairness = await run('bantuanFairnessSnapshot', () => (prisma as any).bantuanFairnessSnapshot.count());
+  const territories = await run('territorialStressSignal', () => (prisma as any).territorialStressSignal.count());
+  const aiMemory = await run('aIRecommendation', () => (prisma as any).aIRecommendation.count());
+
+  console.log('[seed] printCounts: summary');
+  console.log(
+    JSON.stringify(
+      {
+        users,
+        families,
+        warga,
+        warmindoOutlets: warmindo,
+        warmindoProducts: products,
+        saleLines,
+        attendance,
+        reports,
+        aidRecords,
+        fairnessSnapshots: fairness,
+        territorialSignals: territories,
+        aiRecords: aiTasks + aiReports + aiMemory,
+        operationalAlerts: alerts,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log('[seed] printCounts: done');
 }
 
 async function main() {
-  console.log('Seeding operational data foundation...');
+  const seedMode = (process.env.SEED_MODE ?? 'medium').toLowerCase();
+  console.log(`Seeding operational data foundation (SEED_MODE=${seedMode})...`);
+  console.log('[seed] connecting database (single-client, pool-safe URL)...');
+  await prisma.$connect();
+  console.log('[seed] connected.');
 
+  console.log('[seed] step: seedWilayah');
   const wilayah = await seedWilayah();
+  console.log('[seed] step: upsertUser admin');
   const admin = await upsertUser({ email: 'admin@jakdata.id', nama: 'Administrator JAKDATA', role: 'admin_pusat' });
+  console.log('[seed] step: seedPopulation');
   const families = await seedPopulation(wilayah, admin.id);
+  console.log('[seed] step: seedUmkm');
   await seedUmkm(families, admin.id);
+  console.log('[seed] step: seedWarmindo');
   const outlets = await seedWarmindo(wilayah);
-  await seedWarmindoFieldOps(outlets);
+  if (seedMode !== 'small') {
+    console.log('[seed] step: seedWarmindoFieldOps');
+    await seedWarmindoFieldOps(outlets);
+  } else {
+    console.log('[seed] skip seedWarmindoFieldOps (SEED_MODE=small)');
+  }
+  console.log('[seed] step: seedRoleUsers');
   await seedRoleUsers(wilayah, outlets);
+  console.log('[seed] step: seedAidAndFairness');
   await seedAidAndFairness(families, admin.id);
+  console.log('[seed] step: seedReports');
   await seedReports(wilayah, admin.id);
+  console.log('[seed] step: seedTerritorialIntelligence');
   await seedTerritorialIntelligence(wilayah);
+  console.log('[seed] step: seedOperationalAlerts');
   await seedOperationalAlerts(outlets, admin.id);
+  console.log('[seed] step: seedAiFoundation');
   await seedAiFoundation(wilayah, admin.id);
-  await seedAiGovernanceMemory(wilayah, admin.id);
+  if (seedMode !== 'small') {
+    console.log('[seed] step: seedAiGovernanceMemory');
+    await seedAiGovernanceMemory(wilayah, admin.id);
+  } else {
+    console.log('[seed] skip seedAiGovernanceMemory (SEED_MODE=small)');
+  }
+  console.log('[seed] step: seedOfficialProfile');
   await seedOfficialProfile();
+  console.log('[seed] step: printCounts');
   await printCounts();
 
-  console.log('Demo password for seeded accounts: admin123');
+  console.log('Password operasional untuk akun seed (Data Awal Sistem): admin123');
+  console.log('[seed] finished OK.');
 }
 
 main()
@@ -1522,5 +1705,10 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    try {
+      await prisma.$disconnect();
+      console.log('[seed] prisma disconnected.');
+    } catch (e) {
+      console.error('[seed] disconnect error', e);
+    }
   });

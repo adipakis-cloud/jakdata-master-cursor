@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { buildLaporanListWhere, buildWilayahKeyedListWhere, resolveVisibleRtIds } from '../security/security';
 
 export async function aiRoutes(app: FastifyInstance) {
   app.post('/task', { preHandler: [app.authenticate] }, async (req, reply) => {
@@ -45,16 +46,64 @@ export async function aiRoutes(app: FastifyInstance) {
     return { observations, recommendations, decisions, outcomes, learning, failures, causal };
   });
 
-  app.get('/recommendations', { preHandler: [app.authenticate] }, async () => {
-    const [rtKurang, laporanCritical, alerts, inventory, aidFairnessReports, memoryRecommendations] = await Promise.all([
-      prisma.rT.findMany({ include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: true } } } })
-        .then(rts => rts.filter(r => r._count.warga < 10).slice(0, 5)),
-      prisma.laporanWarga.findMany({ where: { urgencyLevel: 'critical', status: { not: 'selesai' } }, take: 5 }),
-      prisma.operationalAlert.findMany({ where: { status: 'open' }, orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }], take: 8 }),
-      prisma.warmindoInventory.findMany({ include: { warmindo: true }, take: 100 }),
-      prisma.aiReport.findMany({ where: { tipe: { in: ['daily_operational_stress','kelurahan_kapuk_poverty_risk'] } }, orderBy: { createdAt: 'desc' }, take: 3 }),
-      (prisma as any).aIRecommendation.findMany({ where: { status: { in: ['proposed','accepted','failed'] } }, orderBy: { createdAt: 'desc' }, take: 8 }),
-    ]);
+  app.get('/recommendations', { preHandler: [app.authenticate] }, async (req: any) => {
+    const user = req.user as any;
+    const laporanWhere = await buildLaporanListWhere(user);
+    const alertWhere = await buildWilayahKeyedListWhere(user);
+    const rtIds = await resolveVisibleRtIds(user);
+    const rtWhere = rtIds === null ? {} : rtIds.length === 0 ? { id: -1 } : { id: { in: rtIds } };
+
+    let inventoryWhere: any = {};
+    if (rtIds !== null) {
+      if (rtIds.length === 0) inventoryWhere = { id: -1 };
+      else {
+        const kelRows = await prisma.rT.findMany({
+          where: { id: { in: rtIds } },
+          select: { rw: { select: { kelurahanId: true } } },
+        });
+        const kelIds = [...new Set(kelRows.map((r) => r.rw.kelurahanId))];
+        const outlets = await prisma.warmindoOutlet.findMany({
+          where: { OR: [{ rtId: { in: rtIds } }, { kelurahanId: { in: kelIds } }] },
+          select: { id: true },
+        });
+        const ids = outlets.map((o) => o.id);
+        inventoryWhere = ids.length ? { warmindoId: { in: ids } } : { id: -1 };
+      }
+    }
+
+    const rts = await prisma.rT.findMany({
+      where: rtWhere,
+      include: { _count: { select: { warga: true } }, rw: { include: { kelurahan: true } } },
+      take: 80,
+    });
+    const rtKurang = rts.filter((r) => r._count.warga < 10).slice(0, 5);
+    const laporanCritical = await prisma.laporanWarga.findMany({
+      where: { AND: [laporanWhere, { urgencyLevel: 'critical', status: { not: 'selesai' } }] },
+      take: 5,
+    });
+    const alertBase = { status: 'open' as const };
+    const alertsWhere =
+      Object.keys(alertWhere).length === 0 ? alertBase : { AND: [alertBase, alertWhere] };
+    const alerts = await prisma.operationalAlert.findMany({
+      where: alertsWhere,
+      orderBy: [{ severity: 'asc' }, { createdAt: 'desc' }],
+      take: 8,
+    });
+    const inventory = await prisma.warmindoInventory.findMany({
+      where: inventoryWhere,
+      include: { warmindo: true },
+      take: 100,
+    });
+    const aidFairnessReports = await prisma.aiReport.findMany({
+      where: { tipe: { in: ['daily_operational_stress', 'kelurahan_kapuk_poverty_risk'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    });
+    const memoryRecommendations = await (prisma as any).aIRecommendation.findMany({
+      where: { status: { in: ['proposed', 'accepted', 'failed'] } },
+      orderBy: { createdAt: 'desc' },
+      take: 8,
+    });
     const lowStock = inventory.filter(i => i.stokSaatIni <= i.stokMinimum).slice(0, 5);
     return {
       wilayah: rtKurang.map(r => ({ tipe: 'data_lemah', pesan: `RT ${r.nomor} RW ${r.rw.nomor} ${r.rw.kelurahan.nama} baru ${r._count.warga} warga (target: 10)`, prioritas: 'high' })),

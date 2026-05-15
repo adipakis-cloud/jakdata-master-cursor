@@ -1,48 +1,114 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import {
+  buildLaporanListWhere,
+  buildWargaListWhere,
+  canAccessKoordinatorMobileApi,
+  isMobileFieldRole,
+  resolveVisibleRtIds,
+} from '../security/security';
+
+async function requireKoordinatorMobile(req: any, reply: any) {
+  const u = req.user as any;
+  if (!canAccessKoordinatorMobileApi(u.role)) {
+    return reply.code(403).send({ error: 'Akses khusus koordinator lapangan atau admin/auditor.' });
+  }
+}
 
 export async function koordinatorRoutes(app: FastifyInstance) {
-  app.get('/', { preHandler: [app.authenticate] }, async () => {
-    const rows = await prisma.$queryRaw`
-      SELECT wa.id, wa.level, wa.status, wa.kecamatan_id, wa.kelurahan_id, wa.rw_id, wa.rt_id, wa.assigned_at,
-             u.id as user_id, u.nama, u.role, u.no_hp, u.email
-      FROM wilayah_assignments wa
-      JOIN users u ON u.id = wa.user_id
-      WHERE wa.status = 'aktif'
-      ORDER BY wa.level, wa.assigned_at DESC
-    ` as any[];
+  /**
+   * Single mobile home: scope + allowed menus + key counts + recent laporan.
+   * Replaces legacy wilayah_assignments SQL (table may not exist).
+   */
+  app.get('/mobile', { preHandler: [app.authenticate, requireKoordinatorMobile] }, async (req, reply) => {
+    const jwt = req.user as any;
+    const user = await prisma.user.findUnique({
+      where: { id: jwt.sub },
+      include: {
+        kecamatan: { include: { kota: { select: { nama: true } } } },
+        kelurahan: { include: { kecamatan: { select: { nama: true } } } },
+        rw: { include: { kelurahan: { select: { nama: true } } } },
+        rt: { include: { rw: { include: { kelurahan: { select: { nama: true } } } } } },
+      },
+    });
+    if (!user) return reply.code(404).send({ error: 'Pengguna tidak ditemukan' });
 
-    return rows.map((r: any) => ({
-      id: r.id, level: r.level, status: r.status,
-      kecamatanId: r.kecamatan_id, kelurahanId: r.kelurahan_id, rwId: r.rw_id, rtId: r.rt_id,
-      assignedAt: r.assigned_at,
-      wilayahNama: r.level,
-      user: { id: r.user_id, nama: r.nama, role: r.role, noHp: r.no_hp, email: r.email }
-    }));
-  });
+    const rtIds = await resolveVisibleRtIds(user);
+    const lapBase = await buildLaporanListWhere(user);
+    const wargaBase = await buildWargaListWhere(user);
 
-  app.get('/kosong', { preHandler: [app.authenticate] }, async (req) => {
-    const { level = 'kecamatan' } = req.query as any;
-    if (level === 'kecamatan') {
-      const assigned = await prisma.$queryRaw`SELECT kecamatan_id FROM wilayah_assignments WHERE level='kecamatan' AND status='aktif'` as any[];
-      const ids = assigned.map((a: any) => a.kecamatan_id).filter(Boolean);
-      if (ids.length === 0) {
-        return prisma.kecamatan.findMany({ include: { kota: { select: { nama: true } } }, take: 50, orderBy: { nama: 'asc' } })
-          .then(list => list.map(k => ({ id: k.id, nama: k.nama, kota: k.kota.nama })));
-      }
-      return prisma.kecamatan.findMany({ where: { id: { notIn: ids } }, include: { kota: { select: { nama: true } } }, take: 50, orderBy: { nama: 'asc' } })
-        .then(list => list.map(k => ({ id: k.id, nama: k.nama, kota: k.kota.nama })));
-    }
-    if (level === 'kelurahan') {
-      const assigned = await prisma.$queryRaw`SELECT kelurahan_id FROM wilayah_assignments WHERE level='kelurahan' AND status='aktif'` as any[];
-      const ids = assigned.map((a: any) => a.kelurahan_id).filter(Boolean);
-      if (ids.length === 0) {
-        return prisma.kelurahan.findMany({ include: { kecamatan: { include: { kota: { select: { nama: true } } } } }, take: 50, orderBy: { nama: 'asc' } })
-          .then(list => list.map(k => ({ id: k.id, nama: k.nama, kecamatan: k.kecamatan.nama, kota: k.kecamatan.kota.nama })));
-      }
-      return prisma.kelurahan.findMany({ where: { id: { notIn: ids } }, include: { kecamatan: { include: { kota: { select: { nama: true } } } } }, take: 50, orderBy: { nama: 'asc' } })
-        .then(list => list.map(k => ({ id: k.id, nama: k.nama, kecamatan: k.kecamatan.nama, kota: k.kecamatan.kota.nama })));
-    }
-    return [];
+    const [laporanOpen, laporanCritical, wargaCount, recentLaporan] = await Promise.all([
+      prisma.laporanWarga.count({
+        where: { ...lapBase, status: { notIn: ['selesai', 'ditolak'] } },
+      }),
+      prisma.laporanWarga.count({
+        where: {
+          ...lapBase,
+          OR: [{ urgencyLevel: 'critical' }, { isEmergency: true }],
+          status: { notIn: ['selesai', 'ditolak'] },
+        },
+      }),
+      prisma.warga.count({ where: { ...wargaBase, deletedAt: null } }),
+      prisma.laporanWarga.findMany({
+        where: lapBase,
+        orderBy: [{ isEmergency: 'desc' }, { createdAt: 'desc' }],
+        take: 8,
+        select: {
+          id: true,
+          kodeLaporan: true,
+          kategori: true,
+          urgencyLevel: true,
+          status: true,
+          isEmergency: true,
+          createdAt: true,
+          rtId: true,
+          kelurahanId: true,
+        },
+      }),
+    ]);
+
+    const scopeLabel =
+      user.role === 'koordinator_kecamatan'
+        ? user.kecamatan?.nama
+        : user.role === 'koordinator_kelurahan'
+          ? user.kelurahan?.nama
+          : user.role === 'koordinator_rw'
+            ? `RW ${user.rw?.nomor ?? ''} — ${user.rw?.kelurahan?.nama ?? ''}`
+            : user.role === 'koordinator_rt' || user.role === 'petugas_lapangan'
+              ? `RT ${user.rt?.nomor ?? ''} / RW ${user.rt?.rw?.nomor ?? ''}`
+              : user.role === 'admin_pusat'
+                ? 'Nasional'
+                : user.role === 'auditor'
+                  ? 'Audit (baca)'
+                  : '-';
+
+    const governance = user.role === 'admin_pusat' || user.role === 'auditor' || user.role === 'finance_admin';
+
+    return {
+      role: user.role,
+      governance,
+      field: isMobileFieldRole(user.role),
+      scope: {
+        label: scopeLabel,
+        kecamatanId: user.kecamatanId,
+        kelurahanId: user.kelurahanId,
+        rwId: user.rwId,
+        rtId: user.rtId,
+        rtCount: rtIds === null ? null : rtIds.length,
+      },
+      visibility: {
+        laporan: governance || isMobileFieldRole(user.role),
+        warga: governance || isMobileFieldRole(user.role),
+        bantuan: governance || isMobileFieldRole(user.role),
+        warmindo: user.role === 'manager_warmindo' || user.role === 'kasir_warmindo' || governance,
+        triaseLaporan: user.role === 'admin_pusat' || isMobileFieldRole(user.role),
+      },
+      stats: {
+        laporanBelumSelesai: laporanOpen,
+        laporanMendesak: laporanCritical,
+        wargaTerdata: wargaCount,
+      },
+      recentLaporan,
+    };
   });
 }

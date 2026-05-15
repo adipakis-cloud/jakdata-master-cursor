@@ -32,16 +32,19 @@ Ikuti panduan PowerShell lengkap di [`docs/local-runtime.md`](docs/local-runtime
 
 ---
 
-## 🔑 Demo Credentials
+## 🔑 Akun Operasional (Data Awal Sistem)
 
-| Role | Email | Password |
-|------|-------|----------|
-| **Admin Pusat** | admin@jakdata.id | admin123 |
-| **Petugas RT** | petugas.rt001@jakdata.id | petugas123 |
-| **Manager UMKM** | manager.umkm@jakdata.id | manager123 |
+| Label | Email | Password | Peran (API) |
+|-------|-------|----------|-------------|
+| Admin Pusat | admin@jakdata.id | admin123 | admin_pusat |
+| Koordinator Kecamatan | koordinator.kecamatan@jakdata.id | admin123 | koordinator_kecamatan |
+| Koordinator Kelurahan | koordinator.kelurahan@jakdata.id | admin123 | koordinator_kelurahan |
+| Koordinator RW | koordinator.rw@jakdata.id | admin123 | koordinator_rw |
+| Koordinator RT | koordinator.rt@jakdata.id | admin123 | koordinator_rt |
+| Petugas Lapangan | petugas@jakdata.id | admin123 | petugas_lapangan |
+| Operator Warmindo | warmindo@jakdata.id | admin123 | manager_warmindo |
 
-**Admin Pusat** → Dashboard lengkap dengan semua modul
-**Petugas/Manager** → Tampilan operasional sesuai scope akun
+**Admin Pusat** → Command Center (`/admin`). **Koordinator & petugas** → Lapangan (`/field`). **Operator Warmindo** → (`/warmindo`). Sandi seed: `admin123` (ganti di produksi).
 
 ---
 

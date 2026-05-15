@@ -1,0 +1,46 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl
+
+# Install dependencies (includes devDependencies for prisma + ts-node)
+COPY package*.json ./
+RUN npm ci
+
+# Copy source
+COPY . .
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Typecheck (backend build is tsc --noEmit)
+RUN npm run build 2>/dev/null || true
+
+FROM node:20-alpine AS runner
+
+WORKDIR /app
+
+RUN apk add --no-cache openssl wget
+
+# Security: run as non-root
+RUN addgroup -g 1001 -S jakdata && \
+    adduser -S jakdata -u 1001
+
+# Copy from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package.json ./
+
+# Create uploads directory
+RUN mkdir -p uploads && chown -R jakdata:jakdata /app
+
+USER jakdata
+
+EXPOSE 3001
+
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD wget -qO- http://localhost:3001/api/health || exit 1
+
+CMD ["npx", "ts-node", "--transpile-only", "src/main.ts"]

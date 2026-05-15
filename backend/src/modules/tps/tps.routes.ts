@@ -162,7 +162,7 @@ export async function officialRoutes(app: FastifyInstance) {
     const where: any = { officialId: official.id };
     if (status) where.status = status;
     const [data, total] = await Promise.all([
-      prisma.officialAspirasi.findMany({ where, skip: (+page-1)*+limit, take: +limit, orderBy: { createdAt: 'desc' } }),
+      prisma.officialAspirasi.findMany({ where, take: +limit, orderBy: { createdAt: 'desc' } }),
       prisma.officialAspirasi.count({ where }),
     ]);
     return { data, total, page: +page, limit: +limit };
@@ -178,7 +178,7 @@ export async function usersRoutes(app: FastifyInstance) {
     const where: any = {};
     if (role) where.role = role;
     const [data, total] = await Promise.all([
-      prisma.user.findMany({ where, skip: (+page-1)*+limit, take: +limit, orderBy: { createdAt: 'desc' }, select: { id:true, uuid:true, nama:true, email:true, role:true, aktif:true, noHp:true, lastLoginAt:true, kecamatanId:true, kelurahanId:true, rwId:true, rtId:true, createdAt:true } }),
+      prisma.user.findMany({ where, take: +limit, orderBy: { createdAt: 'desc' }, select: { id:true, uuid:true, nama:true, email:true, role:true, aktif:true, noHp:true, lastLoginAt:true, kecamatanId:true, kelurahanId:true, rwId:true, rtId:true, createdAt:true } }),
       prisma.user.count({ where }),
     ]);
     return { data, total, page: +page, limit: +limit };
@@ -206,3 +206,5 @@ export async function usersRoutes(app: FastifyInstance) {
     return prisma.user.update({ where: { id: +id }, data: { aktif }, select: { id:true, aktif:true } });
   });
 }
+
+

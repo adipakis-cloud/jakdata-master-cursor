@@ -1,0 +1,8 @@
+{
+  "name": "jakdata",
+  "private": true,
+  "scripts": {
+    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "db:seed": "npm run db:seed --prefix backend"
+  }
+}

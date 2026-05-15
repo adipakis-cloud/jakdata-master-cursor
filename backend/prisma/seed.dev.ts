@@ -1,6 +1,23 @@
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-const prisma = new PrismaClient();
+import { withPrismaPoolParams } from '../src/config/dbUrl';
+
+const rawDb = process.env.DATABASE_URL;
+const prisma = new PrismaClient(
+  rawDb
+    ? {
+        datasources: {
+          db: {
+            url: withPrismaPoolParams(rawDb, {
+              connectionLimit: 1,
+              poolTimeoutSec: 120,
+              suggestPgBouncer: true,
+            }),
+          },
+        },
+      }
+    : undefined,
+);
 const pad = (n: number, l=3) => String(n).padStart(l,'0');
 
 const JAKARTA: Record<string,{kode:string,tipe?:string,kecamatan:Record<string,string[]>}> = {
@@ -64,7 +81,7 @@ async function main() {
       wCount++;
     }
   }
-  console.log(`✅ ${wCount} warga sample`);
+  console.log(`✅ ${wCount} warga (Data Awal Sistem)`);
 
   // Keluarga
   for (let i=0; i<5; i++) {

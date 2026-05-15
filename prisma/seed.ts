@@ -116,7 +116,7 @@ async function main() {
     },
   });
 
-  // Sample warga (untuk demo)
+  // Data Awal Sistem — warga
   const sampleWarga = [
     { nama: 'Ahmad Fauzi', noHp: '081200001', kategori: 'warga_biasa' },
     { nama: 'Siti Rahayu', noHp: '081200002', kategori: 'penerima_bantuan' },
@@ -132,7 +132,7 @@ async function main() {
     await prisma.warga.create({ data: { rtId: rt001.id, ...w } }).catch(() => {});
   }
 
-  // Sample laporan
+  // Data Awal Sistem — laporan
   await prisma.laporanWarga.upsert({
     where: { kodeLaporan: 'JAK-2026-00001' },
     update: {},
@@ -209,7 +209,7 @@ async function main() {
     });
   }
 
-  // Sample transaksi
+  // Data Awal Sistem — transaksi Warmindo
   await prisma.warmindoTransaksi.create({
     data: {
       warmindoId: warmindo1.id,
@@ -241,7 +241,7 @@ async function main() {
 
   console.log('✅ Seed selesai!');
   console.log('');
-  console.log('📋 Demo credentials:');
+  console.log('📋 Akun Operasional (Data Awal Sistem):');
   console.log('   Admin Pusat  : admin@jakdata.id / admin123');
   console.log('   Petugas RT   : petugas.rt001@jakdata.id / petugas123');
   console.log('   Koordinator  : kordin.rw001@jakdata.id / petugas123');

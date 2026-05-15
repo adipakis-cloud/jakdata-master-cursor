@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: jakdata_db
+    restart: always
+    environment:
+      POSTGRES_DB: jakdata_prod
+      POSTGRES_USER: ${DB_USER:-jakdata}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD required}
+    volumes:
+      - jakdata_pgdata:/var/lib/postgresql/data
+      - ./backup:/backup
+    ports:
+      - "127.0.0.1:5432:5432"  # localhost only, not exposed to internet
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-jakdata}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.prod
+    container_name: jakdata_backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+    ports:
+      - "127.0.0.1:3001:3001"  # reverse proxy only
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - jakdata_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  frontend:
+    image: nginx:alpine
+    container_name: jakdata_frontend
+    restart: always
+    ports:
+      - "127.0.0.1:8080:80"  # reverse proxy only
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx/jakdata.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+
+volumes:
+  jakdata_pgdata:
+    driver: local
+  jakdata_uploads:
+    driver: local

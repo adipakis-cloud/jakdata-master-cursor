@@ -1,14 +1,65 @@
-import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Navigate, Route, Routes, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
+import { AuthStorage } from '../../lib/auth';
 import { useAuth } from '../../store/auth.store';
+import { FieldLayout } from './FieldLayout';
 
-type Page = 'home' | 'tambah_warga' | 'buat_laporan' | 'list_warga';
+type FieldCtx = {
+  warga: any[];
+  stats: any;
+  rtInfo: any;
+  user: any;
+  loadData: () => Promise<void>;
+  showToast: (msg: string) => void;
+};
+
+const FieldDataContext = createContext<FieldCtx | null>(null);
+
+function useFieldData() {
+  const v = useContext(FieldDataContext);
+  if (!v) throw new Error('FieldDataContext');
+  return v;
+}
+
+function prioritasToUrgency(p: string): string {
+  const m: Record<string, string> = { RENDAH: 'low', SEDANG: 'medium', TINGGI: 'high', DARURAT: 'critical' };
+  return m[p] ?? 'medium';
+}
+
+function laporanJudul(l: any): string {
+  const raw = String(l.isiLaporan ?? '').trim();
+  const first = raw.split(/\n+/)[0];
+  if (first && first.length > 0) return first.length > 80 ? `${first.slice(0, 77)}…` : first;
+  return String(l.kategori ?? l.kodeLaporan ?? 'Laporan');
+}
+
+function laporanStatusUi(status: string): { bg: string; fg: string; label: string } {
+  switch (status) {
+    case 'baru':
+    case 'menunggu_data':
+      return { bg: '#fef3c7', fg: '#92400e', label: 'Menunggu' };
+    case 'diproses':
+    case 'eskalasi':
+      return { bg: '#dbeafe', fg: '#1e40af', label: 'Diproses' };
+    case 'selesai':
+      return { bg: '#dcfce7', fg: '#166534', label: 'Selesai' };
+    case 'ditolak':
+      return { bg: '#fee2e2', fg: '#991b1b', label: 'Ditolak' };
+    default:
+      return { bg: '#f3f4f6', fg: '#374151', label: status };
+  }
+}
+
+function maskNik(s: string | undefined | null): string {
+  if (!s || s.length < 4) return '················';
+  const tail = s.slice(-4);
+  return `············${tail}`;
+}
 
 export function FieldApp() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
-  const [page, setPage] = useState<Page>('home');
   const [stats, setStats] = useState<any>(null);
   const [warga, setWarga] = useState<any[]>([]);
   const [rtInfo, setRtInfo] = useState<any>(null);
@@ -16,7 +67,7 @@ export function FieldApp() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [user?.id]);
 
   async function loadData() {
     try {
@@ -25,13 +76,15 @@ export function FieldApp() {
         api.get('/warga', { params: { limit: 100 } }),
       ]);
       setStats(s.data.stats);
-      setWarga(w.data.data);
+      setWarga(Array.isArray(w.data?.data) ? w.data.data : Array.isArray(w.data) ? w.data : []);
       if (user?.rtId) {
         const rt = await api.get(`/wilayah/rt`, { params: { rwId: user.rwId } });
-        const myRT = rt.data?.find((r:any) => r.id === user.rtId);
+        const myRT = rt.data?.find((r: any) => r.id === user.rtId);
         setRtInfo(myRT);
-      }
-    } catch (e) { console.error(e); }
+      } else setRtInfo(null);
+    } catch (e) {
+      console.error(e);
+    }
   }
 
   function showToast(msg: string) {
@@ -39,199 +92,690 @@ export function FieldApp() {
     setTimeout(() => setToast(''), 3000);
   }
 
-  const handleLogout = () => { logout(); nav('/login', { replace: true }); };
+  const ctx: FieldCtx = { warga, stats, rtInfo, user, loadData, showToast };
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-md mx-auto relative">
-      {/* Toast */}
+    <FieldDataContext.Provider value={ctx}>
       {toast && (
-        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-green-600 text-white px-4 py-2 rounded-xl shadow-lg text-sm font-semibold">
+        <div className="fixed left-1/2 top-4 z-[60] -translate-x-1/2 rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
           ✅ {toast}
         </div>
       )}
-
-      {/* Header */}
-      <div className="bg-blue-700 text-white px-4 pt-10 pb-6">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-white/20 rounded-xl flex items-center justify-center text-lg">🗺️</div>
-            <span className="font-bold text-sm">JAKDATA Lapangan</span>
-          </div>
-          <button onClick={handleLogout} className="text-blue-200 text-xs hover:text-white">Keluar</button>
-        </div>
-        <div className="mt-2">
-          <p className="text-blue-100 text-sm">Halo, <span className="text-white font-semibold">{user?.nama?.split(' ')[0]}</span></p>
-          <p className="text-blue-200 text-xs mt-0.5">{user?.role?.replace(/_/g,' ')}</p>
-        </div>
-        {rtInfo && (
-          <div className="mt-3 bg-white/10 rounded-xl px-3 py-2">
-            <p className="text-xs text-blue-200">Wilayah Anda</p>
-            <p className="text-white font-semibold text-sm">RT {rtInfo.nomor} — {rtInfo.rw?.kelurahan?.nama}</p>
-            <div className="mt-1.5 h-1.5 bg-white/20 rounded-full overflow-hidden">
-              <div className="h-full bg-green-400 rounded-full transition-all" style={{width:`${Math.min(100,(rtInfo._count?.warga/10)*100)}%`}} />
-            </div>
-            <p className="text-blue-200 text-xs mt-1">{rtInfo._count?.warga ?? 0}/10 warga (target minimal)</p>
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="px-4 py-5">
-        {page === 'home' && <FieldHome setPage={setPage} warga={warga} stats={stats} />}
-        {page === 'list_warga' && <FieldListWarga warga={warga} setPage={setPage} />}
-        {page === 'tambah_warga' && <FieldTambahWarga user={user} setPage={setPage} onSuccess={() => { loadData(); showToast('Warga berhasil ditambahkan!'); }} />}
-        {page === 'buat_laporan' && <FieldBuatLaporan user={user} setPage={setPage} onSuccess={() => { loadData(); showToast('Laporan berhasil dikirim!'); }} />}
-      </div>
-    </div>
+      <FieldLayout rtInfo={rtInfo}>
+        <Routes>
+          <Route index element={<Navigate to="laporan" replace />} />
+          <Route path="laporan" element={<FieldLaporanListPage />} />
+          <Route path="laporan/baru" element={<FieldBuatLaporanRoute />} />
+          <Route path="laporan/:id" element={<FieldLaporanDetailRoute />} />
+          <Route path="warga" element={<FieldListWargaRoute />} />
+          <Route path="warga/:id" element={<FieldWargaDetailRoute />} />
+          <Route path="warga/tambah" element={<FieldTambahWargaRoute />} />
+          <Route path="bantuan" element={<FieldBantuanRoute />} />
+          <Route path="upload" element={<FieldUploadRoute />} />
+          <Route path="wilayah" element={<FieldWilayahRoute />} />
+          <Route path="profil" element={<FieldProfilRoute onLogout={() => { logout(); nav('/login', { replace: true }); }} />} />
+        </Routes>
+      </FieldLayout>
+    </FieldDataContext.Provider>
   );
 }
 
-// ── Home ─────────────────────────────────────────────────────────
-function FieldHome({ setPage, warga, stats }: any) {
+function FieldLaporanListPage() {
+  const nav = useNavigate();
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const fetchPage = async (p: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    setError(false);
+    try {
+      const { data } = await api.get('/laporan', { params: { page: p, limit: 10 } });
+      const chunk = Array.isArray(data?.data) ? data.data : [];
+      setTotalPages(Number(data?.totalPages) || 1);
+      setRows((prev) => (append ? [...prev, ...chunk] : chunk));
+      setPage(p);
+    } catch {
+      if (!append) setRows([]);
+      setError(true);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPage(1, false);
+  }, []);
+
   return (
     <div className="space-y-4">
-      {/* Quick stats */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="card p-4 text-center">
-          <p className="text-2xl font-bold text-blue-600">{warga.length}</p>
-          <p className="text-xs text-gray-500 mt-0.5">Warga Didata</p>
-        </div>
-        <div className="card p-4 text-center">
-          <p className={`text-2xl font-bold ${stats?.laporanCritical > 0 ? 'text-red-600' : 'text-gray-400'}`}>{stats?.laporanCritical ?? 0}</p>
-          <p className="text-xs text-gray-500 mt-0.5">Laporan Critical</p>
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="grid grid-cols-2 gap-3">
-        <button onClick={() => setPage('tambah_warga')} className="card p-5 text-center hover:shadow-md transition-shadow active:scale-95">
-          <div className="text-3xl mb-2">👤</div>
-          <p className="font-semibold text-gray-800 text-sm">Tambah Warga</p>
-          <p className="text-xs text-gray-400 mt-0.5">Daftarkan warga baru</p>
-        </button>
-        <button onClick={() => setPage('buat_laporan')} className="card p-5 text-center hover:shadow-md transition-shadow active:scale-95">
-          <div className="text-3xl mb-2">📋</div>
-          <p className="font-semibold text-gray-800 text-sm">Buat Laporan</p>
-          <p className="text-xs text-gray-400 mt-0.5">Laporkan masalah warga</p>
-        </button>
-      </div>
-
-      <button onClick={() => setPage('list_warga')} className="w-full card p-4 flex items-center justify-between hover:shadow-md transition-shadow">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">👥</span>
-          <div className="text-left"><p className="font-semibold text-gray-800">Daftar Warga</p><p className="text-xs text-gray-400">{warga.length} warga terdaftar</p></div>
-        </div>
-        <span className="text-gray-400">›</span>
+      <h2 className="text-[18px] font-bold text-gray-900">Laporan Wilayah Saya</h2>
+      <button
+        type="button"
+        className="w-full rounded-lg py-3 text-[15px] font-semibold text-white"
+        style={{ backgroundColor: '#2563eb', minHeight: 44 }}
+        onClick={() => nav('/field/laporan/baru')}
+      >
+        + Buat Laporan
       </button>
 
-      {/* Recent warga */}
-      {warga.slice(0,5).length > 0 && (
-        <div className="card overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100"><p className="text-sm font-semibold text-gray-700">Baru Ditambahkan</p></div>
-          {warga.slice(0,5).map((w:any) => (
-            <div key={w.id} className="px-4 py-3 flex items-center gap-3 border-b border-gray-50 last:border-0">
-              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm shrink-0">{w.nama[0]}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-800 truncate">{w.nama}</p>
-                <p className="text-xs text-gray-400">{w.kategori?.replace(/_/g,' ')}</p>
-              </div>
-              {w.noHp && <a href={`tel:${w.noHp}`} className="text-green-600 text-lg">📞</a>}
-            </div>
+      {loading && (
+        <div className="space-y-2">
+          {[0, 1, 2].map((k) => (
+            <div key={k} className="h-[72px] animate-pulse rounded-lg bg-gray-200" />
           ))}
         </div>
+      )}
+
+      {error && !loading && (
+        <div className="space-y-2 text-center">
+          <p className="text-sm text-red-600">Gagal memuat laporan</p>
+          <button type="button" className="btn-secondary mx-auto justify-center px-4 py-2 text-sm" onClick={() => fetchPage(1, false)}>
+            Coba Lagi
+          </button>
+        </div>
+      )}
+
+      {!loading && !error && rows.length === 0 && (
+        <div className="flex flex-col items-center py-10 text-center">
+          <div className="mb-2 text-5xl">📋</div>
+          <p className="font-semibold text-gray-800">Belum ada laporan</p>
+          <p className="mt-1 text-sm text-gray-500">Tap + Buat Laporan untuk mulai</p>
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {rows.map((l: any) => {
+          const st = laporanStatusUi(String(l.status ?? ''));
+          const tgl = l.createdAt ? new Date(l.createdAt).toLocaleDateString('id-ID') : '—';
+          return (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => nav(`/field/laporan/${l.id}`)}
+              className="w-full rounded-lg border border-gray-200 bg-white p-3 text-left shadow-sm"
+              style={{ marginBottom: 8, padding: '12px 16px' }}
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[15px] font-semibold text-gray-900">{laporanJudul(l)}</p>
+                  <p className="mt-1 text-[12px] text-[#6b7280]">
+                    {l.kategori} · {tgl}
+                  </p>
+                </div>
+                <span className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: st.bg, color: st.fg }}>
+                  {st.label}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {!loading && page < totalPages && (
+        <button
+          type="button"
+          className="btn-secondary w-full justify-center py-3 text-sm"
+          disabled={loadingMore}
+          onClick={() => fetchPage(page + 1, true)}
+        >
+          {loadingMore ? 'Memuat…' : 'Muat lebih banyak'}
+        </button>
       )}
     </div>
   );
 }
 
-// ── List Warga ────────────────────────────────────────────────────
-function FieldListWarga({ warga, setPage }: any) {
-  const [q, setQ] = useState('');
-  const filtered = warga.filter((w:any) => w.nama.toLowerCase().includes(q.toLowerCase()));
+function FieldLaporanDetailRoute() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  const [row, setRow] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  const kategoriIcon: Record<string,string> = { warga_biasa:'👤', ketua_rt:'🏠', ketua_rw:'🏘️', koordinator:'📋', penerima_bantuan:'🎁', pekerja_warmindo:'🍜' };
+  useEffect(() => {
+    if (!id) return;
+    api
+      .get(`/laporan/${id}`)
+      .then((r) => setRow(r.data))
+      .catch(() => setRow(null))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) return <p className="text-sm text-gray-500">Memuat…</p>;
+  if (!row) return <p className="text-sm text-red-600">Laporan tidak ditemukan.</p>;
+
+  const st = laporanStatusUi(String(row.status ?? ''));
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setPage('home')} className="text-blue-600 font-semibold text-sm">← Kembali</button>
-        <h2 className="font-bold text-gray-900">Daftar Warga</h2>
-      </div>
-      <input className="input" placeholder="Cari nama..." value={q} onChange={e=>setQ(e.target.value)} />
-      <div className="card divide-y divide-gray-50 overflow-hidden">
-        {filtered.length === 0 && <p className="p-6 text-center text-gray-400 text-sm">Tidak ditemukan</p>}
-        {filtered.map((w:any) => (
-          <div key={w.id} className="px-4 py-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold shrink-0">{w.nama[0]}</div>
-            <div className="flex-1 min-w-0">
-              <p className="font-semibold text-gray-800 text-sm">{w.nama}</p>
-              <p className="text-xs text-gray-400">{w.noHp ?? 'No HP tidak ada'} · RT {w.rt?.nomor}</p>
-            </div>
-            <div className="text-center shrink-0">
-              <div className="text-lg">{kategoriIcon[w.kategori] ?? '👤'}</div>
-              {w.noHp && <a href={`tel:${w.noHp}`} onClick={e=>e.stopPropagation()} className="text-xs text-green-600">Hubungi</a>}
-            </div>
-          </div>
-        ))}
+    <div className="space-y-4">
+      <button type="button" className="text-sm font-semibold text-blue-600" onClick={() => nav('/field/laporan')}>
+        ← Kembali
+      </button>
+      <div className="rounded-lg border border-gray-200 bg-white p-4">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="text-xs text-gray-400">{row.kodeLaporan}</p>
+          <span className="rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: st.bg, color: st.fg }}>
+            {st.label}
+          </span>
+        </div>
+        <p className="text-sm font-semibold text-gray-800">{row.kategori}</p>
+        <p className="mt-3 whitespace-pre-wrap text-sm text-gray-700">{row.isiLaporan}</p>
+        {row.lokasiText && <p className="mt-2 text-xs text-gray-500">Lokasi: {row.lokasiText}</p>}
       </div>
     </div>
   );
 }
 
-// ── Tambah Warga ──────────────────────────────────────────────────
-function FieldTambahWarga({ user, setPage, onSuccess }: any) {
+const KATEGORI_OPTIONS = [
+  { v: 'infrastruktur', l: 'Infrastruktur' },
+  { v: 'sosial', l: 'Sosial' },
+  { v: 'kesehatan', l: 'Kesehatan' },
+  { v: 'keamanan', l: 'Keamanan' },
+  { v: 'ekonomi', l: 'Ekonomi' },
+  { v: 'lingkungan', l: 'Lingkungan' },
+  { v: 'lainnya', l: 'Lainnya' },
+];
+
+function FieldBuatLaporanRoute() {
+  const { loadData, showToast } = useFieldData();
+  const nav = useNavigate();
+  return (
+    <FieldBuatLaporanForm
+      onBack={() => nav('/field/laporan')}
+      onSuccess={() => {
+        loadData();
+        showToast('Laporan berhasil dibuat');
+        nav('/field/laporan');
+      }}
+    />
+  );
+}
+
+function FieldBuatLaporanForm({ onBack, onSuccess }: { onBack: () => void; onSuccess: () => void }) {
+  const [judul, setJudul] = useState('');
+  const [kategori, setKategori] = useState('');
+  const [prioritas, setPrioritas] = useState('SEDANG');
+  const [deskripsi, setDeskripsi] = useState('');
+  const [lokasi, setLokasi] = useState('');
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!fotoFile) {
+      setPreviewUrl(null);
+      return;
+    }
+    const u = URL.createObjectURL(fotoFile);
+    setPreviewUrl(u);
+    return () => URL.revokeObjectURL(u);
+  }, [fotoFile]);
+
+  async function submit() {
+    if (!judul.trim() || !kategori || !deskripsi.trim()) {
+      setError('Judul, kategori, dan deskripsi wajib diisi');
+      return;
+    }
+    const u = AuthStorage.getUser();
+    if (!u) {
+      setError('Sesi habis. Silakan login ulang.');
+      return;
+    }
+
+    setError('');
+    setSaving(true);
+    try {
+      let lampiranUrls: string[] = [];
+      if (fotoFile) {
+        setUploading(true);
+        const fd = new FormData();
+        fd.append('file', fotoFile);
+        const { data } = await api.post('/laporan/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        if (data?.url) lampiranUrls = [data.url];
+        setUploading(false);
+      }
+
+      const isiLaporan = `${judul.trim()}\n\n${deskripsi.trim()}`;
+      await api.post('/laporan', {
+        isiLaporan,
+        kategori,
+        subkategori: '',
+        urgencyLevel: prioritasToUrgency(prioritas),
+        lokasiText: lokasi.trim() || undefined,
+        namaPelapor: u.nama,
+        rtId: u.rtId ?? undefined,
+        rwId: u.rwId ?? undefined,
+        kelurahanId: u.kelurahanId ?? undefined,
+        kecamatanId: u.kecamatanId ?? undefined,
+        lampiranUrls,
+      });
+      onSuccess();
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'Gagal mengirim laporan');
+    } finally {
+      setSaving(false);
+      setUploading(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2">
+        <button type="button" className="text-sm font-semibold text-blue-600" onClick={onBack}>
+          ←
+        </button>
+        <h2 className="text-lg font-bold text-gray-900">Buat Laporan Baru</h2>
+      </div>
+
+      {error && <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+
+      <div className="card space-y-4 p-4">
+        <div>
+          <label className="label">Judul</label>
+          <input
+            className="input min-h-[44px]"
+            value={judul}
+            onChange={(e) => setJudul(e.target.value)}
+            placeholder="Judul singkat masalah"
+            required
+          />
+        </div>
+        <div>
+          <label className="label">Kategori</label>
+          <select className="input min-h-[44px]" value={kategori} onChange={(e) => setKategori(e.target.value)} required>
+            <option value="">Pilih…</option>
+            {KATEGORI_OPTIONS.map((o) => (
+              <option key={o.v} value={o.v}>
+                {o.l}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Prioritas</label>
+          <select className="input min-h-[44px]" value={prioritas} onChange={(e) => setPrioritas(e.target.value)} required>
+            <option value="RENDAH">RENDAH</option>
+            <option value="SEDANG">SEDANG</option>
+            <option value="TINGGI">TINGGI</option>
+            <option value="DARURAT" className="text-red-600">
+              DARURAT
+            </option>
+          </select>
+        </div>
+        <div>
+          <label className="label">Deskripsi</label>
+          <textarea
+            className="input"
+            rows={4}
+            value={deskripsi}
+            onChange={(e) => setDeskripsi(e.target.value)}
+            placeholder="Jelaskan situasi secara detail..."
+            required
+          />
+        </div>
+        <div>
+          <label className="label">Lokasi (opsional)</label>
+          <input
+            className="input min-h-[44px]"
+            value={lokasi}
+            onChange={(e) => setLokasi(e.target.value)}
+            placeholder="Alamat atau patokan lokasi"
+          />
+        </div>
+        <div>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => setFotoFile(e.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="flex w-full flex-col items-center justify-center rounded-lg text-sm font-medium text-gray-600"
+            style={{ border: '2px dashed #d1d5db', minHeight: 80 }}
+          >
+            📷 Ambil Foto Bukti
+          </button>
+          {previewUrl && <img src={previewUrl} alt="" className="mx-auto mt-2 max-h-[200px] rounded-lg object-contain" />}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        className="w-full rounded-lg py-3 font-semibold text-white disabled:opacity-60"
+        style={{ backgroundColor: '#2563eb', minHeight: 48 }}
+        disabled={saving || uploading}
+        onClick={submit}
+      >
+        {saving || uploading ? 'Mengirim…' : 'Kirim Laporan'}
+      </button>
+    </div>
+  );
+}
+
+function FieldListWargaRoute() {
+  const nav = useNavigate();
+  const [qInput, setQInput] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [rows, setRows] = useState<any[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(qInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [qInput]);
+
+  const fetchW = async (p: number, append: boolean) => {
+    if (append) setLoadingMore(true);
+    else setLoading(true);
+    try {
+      const params: any = { page: p, limit: 20 };
+      if (debounced) params.search = debounced;
+      const { data } = await api.get('/warga', { params });
+      const chunk = Array.isArray(data?.data) ? data.data : [];
+      setTotalPages(Number(data?.totalPages) || 1);
+      setRows((prev) => (append ? [...prev, ...chunk] : chunk));
+      setPage(p);
+    } catch {
+      if (!append) setRows([]);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchW(1, false);
+  }, [debounced]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-[18px] font-bold text-gray-900">Data Warga</h2>
+        <button type="button" className="text-xs font-semibold text-blue-600" onClick={() => nav('/field/warga/tambah')}>
+          + Tambah
+        </button>
+      </div>
+      <input
+        type="search"
+        className="input min-h-[44px] w-full rounded-lg"
+        placeholder="Cari nama atau NIK..."
+        value={qInput}
+        onChange={(e) => setQInput(e.target.value)}
+      />
+      {loading && <p className="text-sm text-gray-500">Memuat…</p>}
+      <div className="space-y-2">
+        {rows.map((w: any) => {
+          const nikDisp = maskNik(w.nikEncrypted ?? w.nik ?? '');
+          const penerima = w.kategori === 'penerima_bantuan';
+          return (
+            <button
+              key={w.id}
+              type="button"
+              onClick={() => nav(`/field/warga/${w.id}`)}
+              className="w-full rounded-lg border border-gray-200 bg-white p-3 text-left"
+            >
+              <p className="font-semibold text-gray-900">{w.nama}</p>
+              <p className="text-xs text-gray-500">NIK: {nikDisp}</p>
+              <p className="text-[12px] text-[#6b7280]">
+                RT {w.rt?.nomor ?? '—'} / RW {w.rt?.rw?.nomor ?? '—'}
+              </p>
+              <div className="mt-2">
+                <span
+                  className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold"
+                  style={{
+                    backgroundColor: penerima ? '#dcfce7' : '#f3f4f6',
+                    color: penerima ? '#166534' : '#6b7280',
+                  }}
+                >
+                  {penerima ? 'Penerima' : 'Tidak'}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+      {!loading && page < totalPages && (
+        <button
+          type="button"
+          className="btn-secondary w-full justify-center py-3 text-sm"
+          disabled={loadingMore}
+          onClick={() => fetchW(page + 1, true)}
+        >
+          {loadingMore ? 'Memuat…' : 'Muat lebih banyak'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function FieldWargaDetailRoute() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  const [w, setW] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    api
+      .get(`/warga/${id}`)
+      .then((r) => {
+        setW(r.data);
+        setErr(false);
+      })
+      .catch(() => {
+        setW(null);
+        setErr(true);
+      })
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  if (loading) return <p className="text-sm text-gray-500">Memuat…</p>;
+  if (err || !w) return <p className="text-sm text-red-600">Warga tidak ditemukan.</p>;
+
+  return (
+    <div className="space-y-3">
+      <button type="button" className="text-sm font-semibold text-blue-600" onClick={() => nav('/field/warga')}>
+        ← Kembali
+      </button>
+      <div className="card space-y-2 p-4 text-sm text-gray-800">
+        <p className="text-lg font-bold">{w.nama}</p>
+        <p className="text-gray-500">RT {w.rt?.nomor}</p>
+        <p className="whitespace-pre-wrap text-gray-700">{w.catatan || '—'}</p>
+      </div>
+    </div>
+  );
+}
+
+function FieldTambahWargaRoute() {
+  const { user, loadData, showToast } = useFieldData();
+  const nav = useNavigate();
+  return (
+    <FieldTambahWarga
+      user={user}
+      onBack={() => nav('/field/warga')}
+      onSuccess={() => {
+        loadData();
+        showToast('Warga berhasil ditambahkan!');
+        nav('/field/warga');
+      }}
+    />
+  );
+}
+
+function FieldBantuanRoute() {
+  return <FieldBantuanKebutuhan />;
+}
+
+function FieldUploadRoute() {
+  const nav = useNavigate();
+  return <FieldUploadBukti onOpenLaporan={() => nav('/field/laporan/baru')} />;
+}
+
+function FieldWilayahRoute() {
+  const { user, rtInfo } = useFieldData();
+  return <FieldWilayahSaya user={user} rtInfo={rtInfo} />;
+}
+
+function FieldProfilRoute({ onLogout }: { onLogout: () => void }) {
+  const u = AuthStorage.getUser();
+  const initials = useMemo(() => {
+    const n = (u?.nama ?? '?').trim();
+    const p = n.split(/\s+/).filter(Boolean);
+    if (p.length >= 2) return (p[0][0] + p[p.length - 1][0]).toUpperCase();
+    return n.slice(0, 2).toUpperCase() || '?';
+  }, [u?.nama]);
+
+  const roleLabel = (u?.role ?? '').replace(/_/g, ' ');
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col items-center text-center">
+        <div
+          className="mb-3 flex h-16 w-16 items-center justify-center rounded-full text-xl font-bold text-white"
+          style={{ backgroundColor: '#2563eb' }}
+        >
+          {initials}
+        </div>
+        <p className="text-[18px] font-semibold text-gray-900">{u?.nama}</p>
+        <p className="text-sm text-gray-600">{u?.email}</p>
+        <p className="mt-1 text-sm capitalize text-gray-500">{roleLabel}</p>
+        <p className="mt-2 text-xs text-gray-500">
+          Wilayah: RT {u?.rtId ?? '—'} / RW {u?.rwId ?? '—'} / Kel. {u?.kelurahanId ?? '—'}
+        </p>
+      </div>
+      <button
+        type="button"
+        className="w-full rounded-lg py-3 text-sm font-semibold"
+        style={{ border: '1px solid #ef4444', color: '#ef4444', backgroundColor: 'white', minHeight: 44 }}
+        onClick={onLogout}
+      >
+        Keluar dari Akun
+      </button>
+      <p className="text-center text-[12px] text-[#9ca3af]">JAKDATA Field v0.1</p>
+    </div>
+  );
+}
+
+function FieldTambahWarga({ user, onBack, onSuccess }: { user: any; onBack: () => void; onSuccess: () => void }) {
   const [rtList, setRtList] = useState<any[]>([]);
-  const [form, setForm] = useState({ nama:'', noHp:'', rtId: String(user?.rtId ?? ''), jenisKelamin:'', kategori:'warga_biasa', pekerjaan:'', statusEkonomi:'', catatan:'' });
+  const [form, setForm] = useState({
+    nama: '',
+    noHp: '',
+    rtId: String(user?.rtId ?? ''),
+    jenisKelamin: '',
+    kategori: 'warga_biasa',
+    pekerjaan: '',
+    statusEkonomi: '',
+    catatan: '',
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.get('/wilayah/rt').then(r => setRtList(r.data)).catch(console.error);
+    api
+      .get('/wilayah/rt')
+      .then((r) => setRtList(r.data))
+      .catch(console.error);
   }, []);
 
   async function submit() {
-    if (!form.nama.trim()) { setError('Nama wajib diisi'); return; }
-    if (!form.rtId) { setError('RT wajib dipilih'); return; }
-    setError(''); setSaving(true);
+    if (!form.nama.trim()) {
+      setError('Nama wajib diisi');
+      return;
+    }
+    if (!form.rtId) {
+      setError('RT wajib dipilih');
+      return;
+    }
+    setError('');
+    setSaving(true);
     try {
       await api.post('/warga', form);
       onSuccess();
-      setPage('home');
-    } catch (e:any) { setError(e.response?.data?.error ?? 'Gagal menyimpan'); }
-    finally { setSaving(false); }
+    } catch (e: any) {
+      setError(e.response?.data?.error ?? 'Gagal menyimpan');
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <button onClick={() => setPage('home')} className="text-blue-600 font-semibold text-sm">← Kembali</button>
+        <button type="button" onClick={onBack} className="text-sm font-semibold text-blue-600">
+          ← Kembali
+        </button>
         <h2 className="font-bold text-gray-900">Tambah Warga</h2>
       </div>
-
-      {error && <div className="bg-red-50 text-red-700 text-sm p-3 rounded-xl border border-red-100">{error}</div>}
-
-      <div className="card p-4 space-y-4">
-        <div><label className="label">Nama Lengkap *</label><input className="input" autoFocus value={form.nama} onChange={e=>setForm({...form,nama:e.target.value})} placeholder="Masukkan nama lengkap" /></div>
-        <div><label className="label">No. HP / WA</label><input className="input" type="tel" inputMode="tel" value={form.noHp} onChange={e=>setForm({...form,noHp:e.target.value})} placeholder="081xxx..." /></div>
-        <div><label className="label">RT *</label>
-          <select className="input" value={form.rtId} onChange={e=>setForm({...form,rtId:e.target.value})}>
+      {error && <div className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+      <div className="card space-y-4 p-4">
+        <div>
+          <label className="label">Nama Lengkap *</label>
+          <input
+            className="input"
+            autoFocus
+            value={form.nama}
+            onChange={(e) => setForm({ ...form, nama: e.target.value })}
+            placeholder="Masukkan nama lengkap"
+          />
+        </div>
+        <div>
+          <label className="label">No. HP / WA</label>
+          <input
+            className="input"
+            type="tel"
+            inputMode="tel"
+            value={form.noHp}
+            onChange={(e) => setForm({ ...form, noHp: e.target.value })}
+            placeholder="081xxx..."
+          />
+        </div>
+        <div>
+          <label className="label">RT *</label>
+          <select className="input" value={form.rtId} onChange={(e) => setForm({ ...form, rtId: e.target.value })}>
             <option value="">Pilih RT...</option>
-            {rtList.map((rt:any) => <option key={rt.id} value={rt.id}>RT {rt.nomor} — {rt.rw?.kelurahan?.nama}</option>)}
+            {rtList.map((rt: any) => (
+              <option key={rt.id} value={rt.id}>
+                RT {rt.nomor} — {rt.rw?.kelurahan?.nama}
+              </option>
+            ))}
           </select>
         </div>
-        <div><label className="label">Kategori Warga</label>
-          <select className="input" value={form.kategori} onChange={e=>setForm({...form,kategori:e.target.value})}>
-            <option value="warga_biasa">👤 Warga Biasa</option>
-            <option value="ketua_rt">🏠 Ketua RT</option>
-            <option value="ketua_rw">🏘️ Ketua RW</option>
-            <option value="koordinator">📋 Koordinator</option>
-            <option value="penerima_bantuan">🎁 Penerima Bantuan</option>
-            <option value="pekerja_warmindo">🍜 Pekerja Warmindo</option>
+        <div>
+          <label className="label">Kategori Warga</label>
+          <select className="input" value={form.kategori} onChange={(e) => setForm({ ...form, kategori: e.target.value })}>
+            <option value="warga_biasa">Warga Biasa</option>
+            <option value="ketua_rt">Ketua RT</option>
+            <option value="ketua_rw">Ketua RW</option>
+            <option value="koordinator">Koordinator</option>
+            <option value="penerima_bantuan">Penerima Bantuan</option>
+            <option value="pekerja_warmindo">Pekerja Warmindo</option>
           </select>
         </div>
-        <div><label className="label">Pekerjaan</label><input className="input" value={form.pekerjaan} onChange={e=>setForm({...form,pekerjaan:e.target.value})} placeholder="Pedagang, Buruh, dsb..." /></div>
-        <div><label className="label">Status Ekonomi</label>
-          <select className="input" value={form.statusEkonomi} onChange={e=>setForm({...form,statusEkonomi:e.target.value})}>
+        <div>
+          <label className="label">Pekerjaan</label>
+          <input className="input" value={form.pekerjaan} onChange={(e) => setForm({ ...form, pekerjaan: e.target.value })} placeholder="Pekerjaan" />
+        </div>
+        <div>
+          <label className="label">Status Ekonomi</label>
+          <select className="input" value={form.statusEkonomi} onChange={(e) => setForm({ ...form, statusEkonomi: e.target.value })}>
             <option value="">Pilih status...</option>
             <option value="sangat_miskin">Sangat Miskin</option>
             <option value="miskin">Miskin</option>
@@ -240,124 +784,105 @@ function FieldTambahWarga({ user, setPage, onSuccess }: any) {
             <option value="mampu">Mampu</option>
           </select>
         </div>
-        <div><label className="label">Catatan</label><textarea className="input" rows={2} value={form.catatan} onChange={e=>setForm({...form,catatan:e.target.value})} placeholder="Info tambahan (opsional)" /></div>
+        <div>
+          <label className="label">Catatan</label>
+          <textarea className="input" rows={2} value={form.catatan} onChange={(e) => setForm({ ...form, catatan: e.target.value })} placeholder="Opsional" />
+        </div>
       </div>
-
       <button className="btn-primary w-full justify-center py-4 text-base" disabled={saving} onClick={submit}>
-        {saving ? '⏳ Menyimpan...' : '✅ Simpan Warga'}
+        {saving ? 'Menyimpan…' : 'Simpan Warga'}
       </button>
     </div>
   );
 }
 
-// ── Buat Laporan ──────────────────────────────────────────────────
-function FieldBuatLaporan({ user, setPage, onSuccess }: any) {
-  const [form, setForm] = useState({ kategori:'', subkategori:'', urgencyLevel:'medium', isiLaporan:'', namaPelapor:'', noHpPelapor:'', lokasiText:'', lampiranUrls:[] as string[] });
-  const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
+function FieldWilayahSaya({ user, rtInfo }: { user: any; rtInfo: any }) {
+  const [me, setMe] = useState<any>(null);
+  useEffect(() => {
+    api
+      .get('/auth/me')
+      .then((r) => setMe(r.data))
+      .catch(() => setMe(null));
+  }, []);
+  return (
+    <div className="space-y-3">
+      <h2 className="font-bold text-gray-900">Wilayah Saya</h2>
+      <div className="card space-y-2 p-4 text-sm text-gray-700">
+        <p>
+          <span className="text-gray-500">Peran:</span> {user?.role?.replace(/_/g, ' ')}
+        </p>
+        {me?.kecamatan && (
+          <p>
+            <span className="text-gray-500">Kecamatan:</span> {me.kecamatan.nama}
+          </p>
+        )}
+        {me?.kelurahan && (
+          <p>
+            <span className="text-gray-500">Kelurahan:</span> {me.kelurahan.nama}
+          </p>
+        )}
+        {me?.rw && (
+          <p>
+            <span className="text-gray-500">RW:</span> {me.rw.nomor}
+          </p>
+        )}
+        {me?.rt && (
+          <p>
+            <span className="text-gray-500">RT:</span> {me.rt.nomor}
+          </p>
+        )}
+        {rtInfo && (
+          <p className="border-t border-gray-100 pt-2 text-xs text-gray-500">
+            Ringkasan RT aktif: RT {rtInfo.nomor} — {rtInfo.rw?.kelurahan?.nama}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
-  const kategoriList = ['bencana','sosial','pendidikan','kesehatan','ekonomi','bantuan'];
-  const subkategoriMap: Record<string,string[]> = {
-    bencana: ['banjir','kebakaran','longsor','evakuasi','darurat'],
-    sosial: ['anak_jalanan','lansia_terlantar','keluarga_tidak_makan','keluarga_miskin'],
-    pendidikan: ['anak_putus_sekolah','butuh_seragam','butuh_biaya_sekolah'],
-    kesehatan: ['butuh_ambulans','warga_sakit','ibu_hamil_berisiko','butuh_obat'],
-    ekonomi: ['kehilangan_pekerjaan','butuh_kerja','umkm_butuh_bantuan','butuh_modal'],
-    bantuan: ['bantuan_belum_terima','bantuan_salah_sasaran','penyalahgunaan'],
-  };
+function FieldBantuanKebutuhan() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api
+      .get('/bantuan')
+      .then((r) => {
+        const d = r.data;
+        setRows(Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : []);
+      })
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  }, []);
+  return (
+    <div className="space-y-3">
+      <h2 className="font-bold text-gray-900">Bantuan & Kebutuhan</h2>
+      {loading && <p className="text-sm text-gray-500">Memuat…</p>}
+      <div className="card divide-y divide-gray-50 overflow-hidden">
+        {rows.length === 0 && !loading && <p className="p-6 text-center text-sm text-gray-400">Tidak ada data program.</p>}
+        {rows.map((b: any) => (
+          <div key={b.id} className="px-4 py-3">
+            <p className="text-sm font-semibold text-gray-800">{b.nama}</p>
+            <p className="text-xs text-gray-500">
+              {b.tipe} · stok {b.stokTersisa ?? 0}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-  async function uploadFoto() {
-    if (!fileRef.current?.files?.length) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      fd.append('file', fileRef.current.files[0]);
-      const { data } = await api.post('/laporan/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      setForm(f => ({ ...f, lampiranUrls: [...f.lampiranUrls, data.url] }));
-    } catch { alert('Gagal upload foto'); }
-    finally { setUploading(false); }
-  }
-
-  async function submit() {
-    if (!form.kategori || !form.isiLaporan.trim()) { setError('Kategori dan isi laporan wajib diisi'); return; }
-    setError(''); setSaving(true);
-    try {
-      await api.post('/laporan', { ...form, namaPelapor: form.namaPelapor || user?.nama, rtId: user?.rtId });
-      onSuccess();
-      setPage('home');
-    } catch (e:any) { setError(e.response?.data?.error ?? 'Gagal mengirim laporan'); }
-    finally { setSaving(false); }
-  }
-
+function FieldUploadBukti({ onOpenLaporan }: { onOpenLaporan: () => void }) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setPage('home')} className="text-blue-600 font-semibold text-sm">← Kembali</button>
-        <h2 className="font-bold text-gray-900">Buat Laporan</h2>
+      <h2 className="font-bold text-gray-900">Upload Bukti</h2>
+      <div className="card space-y-3 p-4 text-sm text-gray-700">
+        <p>Foto bukti dilampirkan pada alur Buat Laporan (satu tempat, terekam ke server).</p>
+        <button type="button" className="btn-primary w-full justify-center py-3" onClick={onOpenLaporan}>
+          Buka Buat Laporan
+        </button>
       </div>
-
-      {error && <div className="bg-red-50 text-red-700 text-sm p-3 rounded-xl border border-red-100">{error}</div>}
-
-      <div className="card p-4 space-y-4">
-        <div><label className="label">Nama Pelapor</label><input className="input" value={form.namaPelapor} onChange={e=>setForm({...form,namaPelapor:e.target.value})} placeholder={user?.nama ?? 'Nama Anda'} /></div>
-        <div><label className="label">No. HP / WA</label><input className="input" type="tel" value={form.noHpPelapor} onChange={e=>setForm({...form,noHpPelapor:e.target.value})} placeholder="081xxx..." /></div>
-
-        <div><label className="label">Kategori Masalah *</label>
-          <div className="grid grid-cols-3 gap-2">
-            {kategoriList.map(k => (
-              <button key={k} onClick={()=>setForm({...form,kategori:k,subkategori:''})}
-                className={`py-2 px-1 rounded-xl text-xs font-semibold border transition-colors ${form.kategori===k?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}>
-                {k.charAt(0).toUpperCase()+k.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {form.kategori && subkategoriMap[form.kategori] && (
-          <div><label className="label">Subkategori</label>
-            <select className="input" value={form.subkategori} onChange={e=>setForm({...form,subkategori:e.target.value})}>
-              <option value="">Pilih subkategori...</option>
-              {subkategoriMap[form.kategori].map(s=><option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
-            </select>
-          </div>
-        )}
-
-        <div><label className="label">Tingkat Urgensi</label>
-          <div className="grid grid-cols-4 gap-2">
-            {[['critical','🚨','red'],['high','⚠️','orange'],['medium','📋','yellow'],['low','ℹ️','green']].map(([v,icon,c])=>(
-              <button key={v} onClick={()=>setForm({...form,urgencyLevel:v})}
-                className={`py-2 text-xs font-bold rounded-xl border transition-colors ${form.urgencyLevel===v?`bg-${c}-500 text-white border-${c}-500`:'bg-white text-gray-500 border-gray-200'}`}>
-                {icon}<br/>{v}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div><label className="label">Lokasi (RT/RW/Alamat)</label><input className="input" value={form.lokasiText} onChange={e=>setForm({...form,lokasiText:e.target.value})} placeholder="RT 001 RW 002 Jl. ..." /></div>
-
-        <div><label className="label">Isi Laporan *</label>
-          <textarea className="input" rows={4} value={form.isiLaporan} onChange={e=>setForm({...form,isiLaporan:e.target.value})} placeholder="Jelaskan masalah atau situasi yang terjadi secara detail..." />
-        </div>
-
-        <div>
-          <label className="label">Foto Bukti (Opsional)</label>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={uploadFoto} />
-          <button onClick={()=>fileRef.current?.click()} disabled={uploading} className="btn-secondary w-full justify-center">
-            {uploading ? '⏳ Mengupload...' : '📷 Upload Foto'}
-          </button>
-          {form.lampiranUrls.length > 0 && (
-            <div className="flex gap-2 mt-2 flex-wrap">
-              {form.lampiranUrls.map((url,i)=><span key={i} className="badge-green">✅ Foto {i+1}</span>)}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <button className="btn-primary w-full justify-center py-4 text-base" disabled={saving} onClick={submit}>
-        {saving ? '⏳ Mengirim...' : '📤 Kirim Laporan'}
-      </button>
     </div>
   );
 }

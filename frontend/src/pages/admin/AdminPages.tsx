@@ -526,7 +526,7 @@ export function AdminAI() {
             </div>
           </div>
           <div><label className="label">Deskripsi Konten</label>
-            <textarea className="input" rows={3} value={designForm.prompt} onChange={e=>setDesignForm({...designForm,prompt:e.target.value})} placeholder="Contoh: Kegiatan pendataan warga RT 001 RW 002 Kelurahan Kapuk, 10 Mei 2026..." />
+            <textarea className="input" rows={3} value={designForm.prompt} onChange={e=>setDesignForm({...designForm,prompt:e.target.value})} placeholder="Data Awal Sistem: Kegiatan pendataan warga RT 001 RW 002 Kelurahan Kapuk, 10 Mei 2026..." />
           </div>
           <button className="btn-primary" disabled={designing} onClick={generateContent}>{designing ? '⏳ Generating...' : '✨ Generate'}</button>
           {designResult && (
