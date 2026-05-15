@@ -7,3 +7,6 @@ dist/
 uploads/
 backup/
 *.sql.gz
+
+frontend/node_modules
+backend/node_modules
