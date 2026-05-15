@@ -87,7 +87,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/wrong-app" element={<WrongApp />} />
-        {APP_MODE === 'command' ? <CommandRoutes /> : <FieldRoutes />}
+        {APP_MODE === 'command' ? CommandRoutes() : FieldRoutes()}
         <Route
           path="/unauthorized"
           element={
