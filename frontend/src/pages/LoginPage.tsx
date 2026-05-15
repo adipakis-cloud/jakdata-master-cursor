@@ -1,5 +1,5 @@
 import { useState, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../store/auth.store';
 import { defaultHomePath } from '../lib/routePolicy';
@@ -9,8 +9,10 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const { login, refreshPasswordStatus } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
+  const flashMessage = (location.state as { message?: string } | null)?.message;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -19,6 +21,7 @@ export function LoginPage() {
     try {
       const { data } = await api.post('/auth/login', { email, password });
       login(data.user, data.token);
+      await refreshPasswordStatus();
       const dest = typeof data.redirectTo === 'string' && data.redirectTo ? data.redirectTo : defaultHomePath(data.user.role);
       nav(dest, { replace: true });
     } catch (err: any) {
@@ -50,6 +53,9 @@ export function LoginPage() {
         </div>
 
         <div className="bg-white rounded-2xl p-6 shadow-2xl">
+          {flashMessage ? (
+            <p className="mb-4 rounded-lg border border-green-200 bg-green-50 p-2 text-sm text-green-800">{flashMessage}</p>
+          ) : null}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="label">Email</label>

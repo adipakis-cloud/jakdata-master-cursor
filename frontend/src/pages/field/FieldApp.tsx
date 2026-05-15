@@ -5,6 +5,7 @@ import { AuthStorage } from '../../lib/auth';
 import { useAuth } from '../../store/auth.store';
 import { FieldLayout } from './FieldLayout';
 import TambahWarga from './TambahWarga';
+import { FieldProfil } from './FieldProfil';
 
 type FieldCtx = {
   warga: any[];
@@ -114,7 +115,7 @@ export function FieldApp() {
           <Route path="bantuan" element={<FieldBantuanRoute />} />
           <Route path="upload" element={<FieldUploadRoute />} />
           <Route path="wilayah" element={<FieldWilayahRoute />} />
-          <Route path="profil" element={<FieldProfilRoute onLogout={() => { logout(); nav('/login', { replace: true }); }} />} />
+          <Route path="profil" element={<FieldProfil onLogout={() => { logout(); nav('/login', { replace: true }); }} />} />
         </Routes>
       </FieldLayout>
     </FieldDataContext.Provider>
@@ -635,6 +636,7 @@ function FieldWilayahRoute() {
   return <FieldWilayahSaya user={user} rtInfo={rtInfo} />;
 }
 
+/* removed — use FieldProfil.tsx
 function FieldProfilRoute({ onLogout }: { onLogout: () => void }) {
   const u = AuthStorage.getUser();
   const initials = useMemo(() => {
@@ -674,6 +676,7 @@ function FieldProfilRoute({ onLogout }: { onLogout: () => void }) {
     </div>
   );
 }
+*/
 
 function FieldWilayahSaya({ user, rtInfo }: { user: any; rtInfo: any }) {
   const [me, setMe] = useState<any>(null);

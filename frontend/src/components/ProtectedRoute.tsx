@@ -1,6 +1,8 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AuthStorage } from '../lib/auth';
+import { useAuth } from '../store/auth.store';
+import { DefaultPasswordBanner } from './auth/DefaultPasswordBanner';
 import { AccessDenied } from '../pages/AccessDenied';
 
 type Props = {
@@ -12,6 +14,11 @@ type Props = {
 export default function ProtectedRoute({ allowedRoles, children }: Props) {
   const token = AuthStorage.getToken();
   const user = AuthStorage.getUser();
+  const { refreshPasswordStatus } = useAuth();
+
+  useEffect(() => {
+    if (token && user) void refreshPasswordStatus();
+  }, [token, user?.id, refreshPasswordStatus]);
 
   if (!token || !user) {
     return <Navigate to="/login" replace />;
@@ -21,5 +28,10 @@ export default function ProtectedRoute({ allowedRoles, children }: Props) {
     return <AccessDenied />;
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <DefaultPasswordBanner />
+      {children}
+    </>
+  );
 }

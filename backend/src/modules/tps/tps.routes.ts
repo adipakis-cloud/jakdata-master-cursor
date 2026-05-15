@@ -1,6 +1,8 @@
 // ── tps.routes.ts ────────────────────────────────────────────────
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { buildWilayahUserFilter, hashPassword } from '../../lib/passwordPolicy';
+import { writeAuditLog } from '../security/security';
 
 export async function tpsRoutes(app: FastifyInstance) {
   // Events
@@ -204,6 +206,69 @@ export async function usersRoutes(app: FastifyInstance) {
     const { id } = req.params as any;
     const { aktif } = req.body as any;
     return prisma.user.update({ where: { id: +id }, data: { aktif }, select: { id:true, aktif:true } });
+  });
+}
+
+export async function adminUsersRoutes(app: FastifyInstance) {
+  app.post('/reset-password', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const actor = req.user as { role?: string; sub?: number; userId?: number };
+    if (actor.role !== 'admin_pusat') {
+      return reply.code(403).send({ error: 'Hanya admin pusat yang dapat mereset password' });
+    }
+
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+    const newPassword = String(body.newPassword ?? '');
+    const userId = body.userId != null ? Number(body.userId) : undefined;
+    const role = body.role != null ? String(body.role) : undefined;
+    const wilayahId = body.wilayahId != null ? Number(body.wilayahId) : undefined;
+    const email = body.email != null ? String(body.email).trim() : undefined;
+
+    if (!newPassword || newPassword.length < 8) {
+      return reply.code(400).send({ error: 'Password baru minimal 8 karakter' });
+    }
+
+    if (!userId && !email && !role) {
+      return reply.code(400).send({ error: 'Pilih userId, email, atau role untuk reset' });
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+
+    let where: Record<string, unknown> = {};
+
+    if (userId && userId > 0) {
+      where = { id: userId };
+    } else if (email) {
+      where = { email };
+    } else if (role) {
+      where = { role };
+      if (wilayahId && wilayahId > 0) {
+        const wilayahFilter = buildWilayahUserFilter(role, wilayahId);
+        if (Object.keys(wilayahFilter).length === 0) {
+          return reply.code(400).send({ error: 'Role tidak mendukung filter wilayahId' });
+        }
+        where = { ...where, ...wilayahFilter };
+      }
+    }
+
+    const result = await prisma.user.updateMany({
+      where: where as any,
+      data: { passwordHash, loginAttempts: 0, lockedUntil: null },
+    });
+
+    const actorId = Number(actor.userId ?? actor.sub);
+    await writeAuditLog({
+      userId: actorId > 0 ? actorId : undefined,
+      action: 'admin.password_reset',
+      entityType: 'user',
+      newValues: { where, count: result.count },
+      ipAddress: req.ip ?? 'unknown',
+    });
+
+    return {
+      success: true,
+      count: result.count,
+      message: `${result.count} akun berhasil direset`,
+    };
   });
 }
 

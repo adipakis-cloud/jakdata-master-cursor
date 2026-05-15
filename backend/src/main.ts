@@ -15,7 +15,7 @@ import { laporanRoutes } from './modules/laporan/laporan.routes';
 import { warmindoRoutes } from './modules/warmindo/warmindo.routes';
 import { bantuanRoutes } from './modules/bantuan/bantuan.routes';
 import { aiRoutes } from './modules/ai/ai.routes';
-import { tpsRoutes, officialRoutes, usersRoutes } from './modules/tps/tps.routes';
+import { tpsRoutes, officialRoutes, usersRoutes, adminUsersRoutes } from './modules/tps/tps.routes';
 import { koordinatorRoutes } from './modules/koordinator/koordinator.routes';
 import { securityPlugin } from './modules/security/security';
 
@@ -126,6 +126,7 @@ async function bootstrap() {
   await app.register(tpsRoutes, { prefix: '/api/tps' });
   await app.register(officialRoutes, { prefix: '/api/official' });
   await app.register(usersRoutes, { prefix: '/api/users' });
+  await app.register(adminUsersRoutes, { prefix: '/api/admin/users' });
 
   await app.register(koordinatorRoutes, { prefix: '/api/koordinator' });
 

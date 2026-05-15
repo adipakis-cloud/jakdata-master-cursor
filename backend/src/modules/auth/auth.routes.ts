@@ -2,7 +2,17 @@ import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
 import { prisma } from '../../config/prisma';
 import { computeWilayahMeta, loginRedirectTo } from '../../lib/loginWilayah';
+import {
+  hashPassword,
+  isDefaultPasswordUser,
+  validateNewPassword,
+} from '../../lib/passwordPolicy';
 import { checkLoginRateLimit, recordFailedLogin, clearLoginAttempts, writeAuditLog } from '../security/security';
+
+function jwtUserId(req: { user?: { sub?: number; userId?: number } }): number {
+  const u = req.user ?? {};
+  return Number(u.userId ?? u.sub);
+}
 
 export async function authRoutes(app: FastifyInstance) {
   app.post(
@@ -136,5 +146,55 @@ export async function authRoutes(app: FastifyInstance) {
     if (!row) return null;
     const { wilayahId, wilayahType } = computeWilayahMeta(row);
     return { ...row, wilayahId, wilayahType };
+  });
+
+  app.get('/password-status', { preHandler: [app.authenticate] }, async (req) => {
+    const userId = jwtUserId(req);
+    const row = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { lastLoginAt: true, passwordHash: true },
+    });
+    if (!row) return { isDefaultPassword: false };
+    const isDefaultPassword = await isDefaultPasswordUser(row);
+    return { isDefaultPassword };
+  });
+
+  app.post('/change-password', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, string>;
+    const currentPassword = String(body.currentPassword ?? '');
+    const newPassword = String(body.newPassword ?? '');
+    const confirmPassword = String(body.confirmPassword ?? '');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return reply.code(400).send({ error: 'Semua field password wajib diisi' });
+    }
+
+    const validationError = validateNewPassword(currentPassword, newPassword, confirmPassword);
+    if (validationError) {
+      return reply.code(400).send({ error: validationError });
+    }
+
+    const userId = jwtUserId(req);
+    const row = await prisma.user.findUnique({ where: { id: userId } });
+    if (!row) return reply.code(404).send({ error: 'Pengguna tidak ditemukan' });
+
+    const currentOk = await bcrypt.compare(currentPassword, row.passwordHash);
+    if (!currentOk) {
+      return reply.code(400).send({ error: 'Password lama tidak sesuai' });
+    }
+
+    const newHash = await hashPassword(newPassword);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { passwordHash: newHash },
+    });
+
+    await writeAuditLog({
+      userId,
+      action: 'auth.password_changed',
+      ipAddress: req.ip ?? 'unknown',
+    });
+
+    return { success: true, message: 'Password berhasil diubah' };
   });
 }

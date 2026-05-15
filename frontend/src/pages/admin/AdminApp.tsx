@@ -5,6 +5,7 @@ import { AdminDashboard } from './AdminDashboard';
 import AdminHome from './AdminHome';
 import { AdminWarga, AdminLaporan, AdminWarmindo, AdminBantuan, AdminAI, AdminWilayah } from './AdminPages';
 import { AdminKoordinator } from './AdminKoordinator';
+import { AdminPasswordReset } from './AdminPasswordReset';
 
 const NAV = [
   { path: 'home', label: 'Beranda', icon: '🏠' },
@@ -15,6 +16,7 @@ const NAV = [
   { path: 'warmindo', label: 'Warmindo', icon: '🍜' },
   { path: 'ai', label: 'AI Alerts', icon: '🤖' },
   { path: 'koordinator', label: 'Governance', icon: '🏛️' },
+  { path: 'password-reset', label: 'Reset Password', icon: '🔐' },
 ];
 
 export function AdminApp() {
@@ -45,7 +47,7 @@ export function AdminApp() {
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {NAV.map((item) => (
+          {(user?.role === 'admin_pusat' ? NAV : NAV.filter((item) => item.path !== 'password-reset')).map((item) => (
             <NavLink
               key={item.path}
               to={`/admin/${item.path}`}
@@ -123,6 +125,7 @@ export function AdminApp() {
             <Route path="bantuan" element={<AdminBantuan />} />
             <Route path="warmindo" element={<AdminWarmindo />} />
             <Route path="ai" element={<AdminAI />} />
+            <Route path="password-reset" element={<AdminPasswordReset />} />
           </Routes>
         </main>
       </div>
