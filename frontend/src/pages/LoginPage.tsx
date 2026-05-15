@@ -1,8 +1,21 @@
-import { useState, FormEvent } from 'react';
+import { useState, FormEvent, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { AuthStorage } from '../lib/auth';
+import { APP_MODE, COMMAND_ROLES, defaultPathForMode, isRoleAllowedInMode } from '../lib/appMode';
 import { useAuth } from '../store/auth.store';
-import { defaultHomePath } from '../lib/routePolicy';
+
+const ALL_OPERATIONAL_ACCOUNTS = [
+  { label: 'Admin Pusat', email: 'admin@jakdata.id', pass: 'admin123', roles: COMMAND_ROLES },
+  { label: 'Koordinator Kecamatan', email: 'koordinator.kecamatan@jakdata.id', pass: 'admin123', roles: ['koordinator_kecamatan'] },
+  { label: 'Koordinator Kelurahan', email: 'koordinator.kelurahan@jakdata.id', pass: 'admin123', roles: ['koordinator_kelurahan'] },
+  { label: 'Koordinator RW', email: 'koordinator.rw@jakdata.id', pass: 'admin123', roles: ['koordinator_rw'] },
+  { label: 'Koordinator RT', email: 'koordinator.rt@jakdata.id', pass: 'admin123', roles: ['koordinator_rt'] },
+  { label: 'Petugas Lapangan', email: 'petugas@jakdata.id', pass: 'admin123', roles: ['petugas_lapangan'] },
+  { label: 'Operator Warmindo', email: 'warmindo@jakdata.id', pass: 'admin123', roles: ['manager_warmindo', 'kasir_warmindo'] },
+] as const;
+
+const isCommand = APP_MODE === 'command';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,45 +27,77 @@ export function LoginPage() {
   const location = useLocation();
   const flashMessage = (location.state as { message?: string } | null)?.message;
 
+  const operationalAccounts = useMemo(
+    () =>
+      ALL_OPERATIONAL_ACCOUNTS.filter((a) =>
+        a.roles.some((r) => isRoleAllowedInMode(r)),
+      ),
+    [],
+  );
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
     setError('');
     try {
       const { data } = await api.post('/auth/login', { email, password });
+
+      if (!isRoleAllowedInMode(data.user.role)) {
+        AuthStorage.clear();
+        nav('/wrong-app', { replace: true });
+        return;
+      }
+
       login(data.user, data.token);
       await refreshPasswordStatus();
-      const dest = typeof data.redirectTo === 'string' && data.redirectTo ? data.redirectTo : defaultHomePath(data.user.role);
+
+      const dest =
+        typeof data.redirectTo === 'string' && data.redirectTo
+          ? data.redirectTo
+          : defaultPathForMode();
       nav(dest, { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.error ?? 'Login gagal. Periksa email dan password.');
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { error?: string } } };
+      setError(ax.response?.data?.error ?? 'Login gagal. Periksa email dan password.');
     } finally {
       setLoading(false);
     }
   }
 
-  const operationalAccounts = [
-    { label: 'Admin Pusat', email: 'admin@jakdata.id', pass: 'admin123', color: 'blue' },
-    { label: 'Koordinator Kecamatan', email: 'koordinator.kecamatan@jakdata.id', pass: 'admin123', color: 'indigo' },
-    { label: 'Koordinator Kelurahan', email: 'koordinator.kelurahan@jakdata.id', pass: 'admin123', color: 'violet' },
-    { label: 'Koordinator RW', email: 'koordinator.rw@jakdata.id', pass: 'admin123', color: 'purple' },
-    { label: 'Koordinator RT', email: 'koordinator.rt@jakdata.id', pass: 'admin123', color: 'fuchsia' },
-    { label: 'Petugas Lapangan', email: 'petugas@jakdata.id', pass: 'admin123', color: 'green' },
-    { label: 'Operator Warmindo', email: 'warmindo@jakdata.id', pass: 'admin123', color: 'amber' },
-  ];
+  const pageStyle = isCommand
+    ? {
+        background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 50%, #1e40af 100%)',
+      }
+    : undefined;
+
+  const pageClass = isCommand
+    ? 'min-h-screen flex items-center justify-center p-4'
+    : 'min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 flex items-center justify-center p-4';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700 flex items-center justify-center p-4">
+    <div className={pageClass} style={pageStyle}>
       <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-white/10 backdrop-blur rounded-2xl flex items-center justify-center mx-auto mb-4 border border-white/20">
-            <span className="text-3xl">🗺️</span>
+        <header className="mb-8 text-center">
+          <div
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-white/20 backdrop-blur"
+            style={{
+              background: isCommand ? 'rgba(245, 158, 11, 0.15)' : 'rgba(255,255,255,0.1)',
+            }}
+          >
+            <span className="text-3xl">{isCommand ? '🏛️' : '🗺️'}</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">JAKDATA</h1>
-          <p className="text-blue-200 text-sm mt-1">Sistem Data Wilayah Jakarta</p>
-        </div>
+          <h1 className="text-2xl font-bold text-white">
+            {isCommand ? 'JAKDATA Command Center' : 'JAKDATA'}
+          </h1>
+          <p className={`mt-1 text-sm ${isCommand ? 'text-amber-200/90' : 'text-blue-200'}`}>
+            {isCommand ? 'Sistem Intelijen Territorial Dapil 3' : 'Sistem Data Wilayah Jakarta'}
+          </p>
+          {isCommand ? (
+            <p className="mt-2 text-xs font-medium tracking-wide text-amber-300/80">DPR RI · Dapil Jakarta III</p>
+          ) : null}
+        </header>
 
-        <div className="bg-white rounded-2xl p-6 shadow-2xl">
+        <div className="rounded-2xl bg-white p-6 shadow-2xl">
           {flashMessage ? (
             <p className="mb-4 rounded-lg border border-green-200 bg-green-50 p-2 text-sm text-green-800">{flashMessage}</p>
           ) : null}
@@ -81,34 +126,44 @@ export function LoginPage() {
                 autoComplete="current-password"
               />
             </div>
-            {error && (
-              <p className="text-red-600 text-sm bg-red-50 rounded-lg p-2 border border-red-100">{error}</p>
-            )}
-            <button className="btn-primary w-full justify-center py-3 text-base" disabled={loading}>
+            {error ? (
+              <p className="rounded-lg border border-red-100 bg-red-50 p-2 text-sm text-red-600">{error}</p>
+            ) : null}
+            <button
+              className="btn-primary w-full justify-center py-3 text-base"
+              style={isCommand ? { backgroundColor: '#1e3a8a' } : undefined}
+              disabled={loading}
+            >
               {loading ? 'Memuat...' : 'Masuk'}
             </button>
           </form>
 
-          <div className="mt-5 pt-4 border-t border-gray-100">
-            <p className="text-xs text-gray-400 text-center mb-3 font-semibold uppercase tracking-wide">Akun Operasional</p>
-            <p className="text-[11px] text-gray-500 text-center mb-3">Data Awal Sistem — gunakan hanya di lingkungan terkontrol.</p>
-            <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {operationalAccounts.map((a) => (
-                <button
-                  key={a.email}
-                  type="button"
-                  onClick={() => {
-                    setEmail(a.email);
-                    setPassword(a.pass);
-                  }}
-                  className="w-full text-left px-3 py-2 rounded-lg border border-gray-200 hover:bg-gray-50 text-sm flex justify-between items-center transition-colors"
-                >
-                  <span className="font-medium text-gray-700">{a.label}</span>
-                  <span className="text-gray-400 text-xs font-mono">{a.email.split('@')[0]}</span>
-                </button>
-              ))}
+          {operationalAccounts.length > 0 ? (
+            <div className="mt-5 border-t border-gray-100 pt-4">
+              <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-400">
+                Akun Operasional
+              </p>
+              <p className="mb-3 text-center text-[11px] text-gray-500">
+                Data awal sistem — gunakan hanya di lingkungan terkontrol.
+              </p>
+              <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                {operationalAccounts.map((a) => (
+                  <button
+                    key={a.email}
+                    type="button"
+                    onClick={() => {
+                      setEmail(a.email);
+                      setPassword(a.pass);
+                    }}
+                    className="flex w-full items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-left text-sm transition-colors hover:bg-gray-50"
+                  >
+                    <span className="font-medium text-gray-700">{a.label}</span>
+                    <span className="font-mono text-xs text-gray-400">{a.email.split('@')[0]}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : null}
         </div>
       </div>
     </div>

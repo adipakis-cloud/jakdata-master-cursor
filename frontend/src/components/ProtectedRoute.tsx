@@ -1,6 +1,7 @@
 import { ReactNode, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { AuthStorage } from '../lib/auth';
+import { isRoleAllowedInMode } from '../lib/appMode';
 import { useAuth } from '../store/auth.store';
 import { DefaultPasswordBanner } from './auth/DefaultPasswordBanner';
 import { AccessDenied } from '../pages/AccessDenied';
@@ -22,6 +23,10 @@ export default function ProtectedRoute({ allowedRoles, children }: Props) {
 
   if (!token || !user) {
     return <Navigate to="/login" replace />;
+  }
+
+  if (!isRoleAllowedInMode(user.role)) {
+    return <Navigate to="/wrong-app" replace />;
   }
 
   if (!allowedRoles.includes(user.role)) {

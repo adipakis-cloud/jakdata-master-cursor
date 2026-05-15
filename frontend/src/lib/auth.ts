@@ -1,3 +1,5 @@
+import { isRoleAllowedInMode } from './appMode';
+
 /** Canonical shape persisted under `jakdata_user`. */
 export type StoredAuthUser = {
   id: number;
@@ -63,3 +65,18 @@ export const AuthStorage = {
     return !!localStorage.getItem('jakdata_token');
   },
 };
+
+/** After login: persist session only if role matches this build's app mode. */
+export function saveSessionIfRoleAllowed(token: string, user: StoredAuthUser): boolean {
+  if (!isRoleAllowedInMode(user.role)) {
+    AuthStorage.clear();
+    return false;
+  }
+  AuthStorage.save(token, user);
+  return true;
+}
+
+export function redirectToWrongApp(): void {
+  AuthStorage.clear();
+  window.location.href = '/wrong-app';
+}
