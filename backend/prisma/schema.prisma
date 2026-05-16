@@ -1459,3 +1459,169 @@ model OfficialAspirasi {
   @@map("official_aspirasi")
 }
 
+// ─── AI ENGINE (Prompt #1) ────────────────────────────────────────────────────
+
+model AiAlert {
+  id           String    @id @default(cuid())
+  alertType    String
+  severity     String
+  wilayahScope String
+  wilayahId    String
+  title        String
+  description  String    @db.Text
+  payload      Json
+  isRead       Boolean   @default(false)
+  isResolved   Boolean   @default(false)
+  resolvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([severity, isResolved])
+  @@index([createdAt])
+  @@map("ai_alerts")
+}
+
+model FraudScore {
+  id           String   @id @default(cuid())
+  subjectType  String
+  subjectId    String
+  score        Float    @default(0)
+  signals      Json
+  calculatedAt DateTime @default(now())
+
+  @@unique([subjectType, subjectId])
+  @@index([score])
+  @@map("fraud_scores")
+}
+
+model AiDecision {
+  id              String   @id @default(cuid())
+  entityType      String
+  entityId        String
+  decisionType    String
+  inputSnapshot   Json
+  outputResult    Json
+  confidenceScore Float    @default(0)
+  fraudScore      Float    @default(0)
+  urgencyScore    Float    @default(0)
+  processedAt     DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@map("ai_decisions")
+}
+
+model AiRecommendation {
+  id              String   @id @default(cuid())
+  targetType      String
+  targetWilayahId String?
+  category        String
+  priority        String
+  title           String
+  body            String   @db.Text
+  evidence        Json
+  isActed         Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  @@index([priority, isActed])
+  @@map("ai_engine_recommendations")
+}
+
+model TerritorialHealthScore {
+  id               String   @id @default(cuid())
+  wilayahType      String
+  wilayahId        String
+  socialScore      Float    @default(50)
+  economicScore    Float    @default(50)
+  operationalScore Float    @default(50)
+  overallScore     Float    @default(50)
+  breakdown        Json
+  period           String
+  calculatedAt     DateTime @default(now())
+
+  @@unique([wilayahType, wilayahId, period])
+  @@map("territorial_health_scores")
+}
+
+model EconomicSnapshot {
+  id            String   @id @default(cuid())
+  warmindoId    String
+  period        String
+  totalRevenue  Float    @default(0)
+  debtTotal     Float    @default(0)
+  customerCount Int      @default(0)
+  topItems      Json
+  snapshotAt    DateTime @default(now())
+
+  @@index([warmindoId, period])
+  @@map("economic_snapshots")
+}
+
+model EconomicAlert {
+  id         String   @id @default(cuid())
+  warmindoId String?
+  wilayahId  String?
+  alertType  String
+  message    String
+  isRead     Boolean  @default(false)
+  detectedAt DateTime @default(now())
+
+  @@map("economic_alerts")
+}
+
+model EconomicScore {
+  id         String   @id @default(cuid())
+  wilayahId  String
+  score      Float
+  trend      String
+  indicators Json
+  period     String
+  scoredAt   DateTime @default(now())
+
+  @@unique([wilayahId, period])
+  @@map("economic_scores")
+}
+
+model WhatsappMessage {
+  id          String   @id @default(cuid())
+  sessionId   String
+  from        String
+  messageType String
+  body        String?  @db.Text
+  aiProcessed Boolean  @default(false)
+  aiReply     String?  @db.Text
+  laporanId   String?
+  receivedAt  DateTime @default(now())
+
+  @@index([from, receivedAt])
+  @@map("whatsapp_messages")
+}
+
+model WhatsappSession {
+  id         String   @id @default(cuid())
+  sessionKey String   @unique
+  status     String
+  qrCode     String?  @db.Text
+  lastSeen   DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  @@map("whatsapp_sessions")
+}
+
+model EmailMessage {
+  id            String   @id @default(cuid())
+  messageUid    String   @unique
+  fromAddress   String
+  subject       String
+  bodyText      String?  @db.Text
+  bodyHtml      String?  @db.Text
+  hasAttachment Boolean  @default(false)
+  aiCategory    String?
+  aiSummary     String?  @db.Text
+  aiReplySent   Boolean  @default(false)
+  aiReplyBody   String?  @db.Text
+  laporanId     String?
+  receivedAt    DateTime @default(now())
+
+  @@index([aiCategory, receivedAt])
+  @@map("email_messages")
+}
+

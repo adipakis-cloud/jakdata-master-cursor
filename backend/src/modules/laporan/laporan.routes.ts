@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { aiQueue } from '../../queues/queue.config';
 import path from 'path';
 import fs from 'fs';
 import { getPagination } from '../../lib/pagination';
@@ -100,6 +101,13 @@ export async function laporanRoutes(app: FastifyInstance) {
     await prisma.laporanMessage.create({
       data: { laporanId: laporan.id, senderType: 'warga', messageText: body.isiLaporan },
     });
+
+    if (process.env.ENABLE_AI_WORKERS !== 'false') {
+      aiQueue
+        .add('fraud-check-laporan', { laporanId: laporan.id }, { priority: 8, delay: 3000 })
+        .catch((err) => console.error('[Laporan] Gagal enqueue fraud-check:', err.message));
+    }
+
     return reply.code(201).send(laporan);
   });
 

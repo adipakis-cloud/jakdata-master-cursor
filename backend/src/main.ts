@@ -18,6 +18,10 @@ import { aiRoutes } from './modules/ai/ai.routes';
 import { tpsRoutes, officialRoutes, usersRoutes, adminUsersRoutes } from './modules/tps/tps.routes';
 import { koordinatorRoutes } from './modules/koordinator/koordinator.routes';
 import { securityPlugin } from './modules/security/security';
+import { startAiWorker } from './workers/ai.worker';
+import { startScheduler } from './workers/scheduler';
+import { startWhatsappAI } from './ai/modules/whatsapp-ai/whatsapp.service';
+import { startEmailAI } from './ai/modules/email-ai/email.service';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -148,6 +152,13 @@ async function bootstrap() {
   try {
     await app.listen({ port, host: '0.0.0.0' });
     console.log(`\n✅ JAKDATA API v3.0 — Port ${port}\n`);
+
+    if (process.env.ENABLE_AI_WORKERS !== 'false') {
+      startAiWorker();
+      startScheduler();
+      startEmailAI();
+      startWhatsappAI().catch((err) => console.error('[WhatsApp AI] Gagal start:', err));
+    }
   } catch (err: any) {
     if (err?.code === 'EADDRINUSE') {
       console.error(

@@ -2,4 +2,10 @@
 .env.local
 .env.production
 uploads/
+wa-auth/
+wa-qr.png
 *.log
+
+.env
+wa-auth/
+wa-qr.png
