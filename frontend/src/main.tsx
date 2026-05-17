@@ -40,6 +40,7 @@ function CommandRoutes() {
   return (
     <>
       <Route path="/command-center" element={<Navigate to="/admin/command-center" replace />} />
+      <Route path="/warmindo-economic" element={<Navigate to="/admin/warmindo-economic" replace />} />
       <Route path="/command/*" element={<Navigate to="/admin/home" replace />} />
       <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
       <Route

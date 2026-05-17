@@ -37,6 +37,101 @@ export async function aiRoutes(app: FastifyInstance) {
     return { success: true, data: scores };
   });
 
+  app.get('/economic-summary', { preHandler: [app.authenticate] }, async (_req, reply) => {
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+      const outlets = await prisma.warmindoOutlet.findMany({
+        where: { aktif: true },
+        include: {
+          rt: { select: { nomor: true } },
+          kelurahan: { select: { nama: true } },
+        },
+        orderBy: { namaOutlet: 'asc' },
+      });
+
+      const summaries = await Promise.all(
+        outlets.map(async (outlet) => {
+          const [transaksi, pengeluaran, economicScore, economicAlerts] = await Promise.all([
+            prisma.warmindoTransaksi.aggregate({
+              where: {
+                warmindoId: outlet.id,
+                tanggal: { gte: thirtyDaysAgo },
+              },
+              _sum: { totalOmzet: true, grossProfit: true },
+              _count: { id: true },
+              _avg: { totalOmzet: true },
+            }),
+            prisma.warmindoPengeluaran.aggregate({
+              where: {
+                warmindoId: outlet.id,
+                tanggal: { gte: thirtyDaysAgo },
+              },
+              _sum: { jumlah: true },
+            }),
+            prisma.economicScore.findFirst({
+              where: { wilayahId: String(outlet.id) },
+              orderBy: { scoredAt: 'desc' },
+            }),
+            prisma.economicAlert.count({
+              where: {
+                warmindoId: String(outlet.id),
+                isRead: false,
+              },
+            }),
+          ]);
+
+          const omzet = transaksi._sum.totalOmzet ?? 0;
+          const target = outlet.targetOmzetHarian * 30;
+          const pencapaian = target > 0 ? Math.round((omzet / target) * 100) : 0;
+
+          return {
+            id: outlet.id,
+            kodeOutlet: outlet.kodeOutlet,
+            namaOutlet: outlet.namaOutlet,
+            status: outlet.status,
+            rt: outlet.rt?.nomor ?? '-',
+            kelurahan: outlet.kelurahan?.nama ?? '-',
+            metrics: {
+              omzet30Hari: omzet,
+              profit30Hari: transaksi._sum.grossProfit ?? 0,
+              totalTransaksi: transaksi._count.id,
+              rataHarian: transaksi._avg.totalOmzet ?? 0,
+              totalPengeluaran: pengeluaran._sum.jumlah ?? 0,
+              targetBulanan: target,
+              pencapaianPersen: pencapaian,
+            },
+            aiScore: economicScore?.score ?? null,
+            aiTrend: economicScore?.trend ?? null,
+            activeAlerts: economicAlerts,
+          };
+        }),
+      );
+
+      const totalOmzet = summaries.reduce((a, b) => a + b.metrics.omzet30Hari, 0);
+
+      return {
+        success: true,
+        data: {
+          summary: {
+            totalOutlet: summaries.length,
+            totalOmzet30Hari: totalOmzet,
+            outletKritis: summaries.filter((s) => s.aiScore !== null && s.aiScore < 40).length,
+            outletSehat: summaries.filter((s) => s.aiScore !== null && s.aiScore >= 70).length,
+            outletBelumDianalisa: summaries.filter((s) => s.aiScore === null).length,
+          },
+          outlets: summaries,
+        },
+      };
+    } catch (err) {
+      console.error('[Economic Summary]', err);
+      return reply.code(500).send({
+        success: false,
+        message: 'Gagal mengambil economic summary',
+      });
+    }
+  });
+
   app.get('/engine-recommendations', { preHandler: [app.authenticate] }, async () => {
     const recs = await prisma.aiRecommendation.findMany({
       where: { isActed: false },
