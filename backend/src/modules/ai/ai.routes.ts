@@ -268,10 +268,11 @@ export async function aiRoutes(app: FastifyInstance) {
     }
   });
 
-  app.get('/whatsapp-messages', { preHandler: [app.authenticate] }, async () => {
+  app.get('/whatsapp-messages', { preHandler: [app.authenticate] }, async (req) => {
+    const limit = Number((req.query as { limit?: string }).limit ?? 100);
     const messages = await prisma.whatsappMessage.findMany({
       orderBy: { receivedAt: 'desc' },
-      take: 50,
+      take: Math.min(limit, 200),
     });
     return { success: true, data: messages };
   });

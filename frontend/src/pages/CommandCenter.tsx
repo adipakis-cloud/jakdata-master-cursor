@@ -196,7 +196,7 @@ export default function CommandCenter() {
         api.get("/ai/alerts", { params: { limit: 30 } }),
         api.get("/ai/engine-recommendations"),
         api.get("/ai/health-scores", { params: { wilayahType: "rt" } }),
-        api.get("/ai/whatsapp-messages"),
+        api.get("/ai/whatsapp-messages", { params: { limit: 200 } }),
         api.get("/ai/email-messages"),
         api.get("/ai/status"),
       ]);
