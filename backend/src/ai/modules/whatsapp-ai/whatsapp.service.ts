@@ -3,37 +3,73 @@ import makeWASocket, {
   useMultiFileAuthState,
 } from "@whiskeysockets/baileys";
 import { Boom } from "@hapi/boom";
-import { PrismaClient } from "@prisma/client";
-import { callAI } from "../../core/anthropic.service";
 import * as path from "path";
 import * as fs from "fs";
+import { prisma } from "../../../config/prisma";
+import {
+  buildKoordinatorForwardText,
+  createEmergencyAlert,
+  jidFromPhone,
+  processWhatsAppLaporan,
+  resolveKoordinatorRtPhones,
+  resolveSenderContext,
+} from "./whatsapp-laporan.service";
 
 const qrcode = require("qrcode-terminal");
 const QRCodeImage = require("qrcode");
 
-const prisma = new PrismaClient();
-const SYSTEM_PROMPT = `Kamu adalah asisten JAKDATA — sistem pengaduan dan informasi warga.
-Tugasmu menerima laporan warga, membantu klarifikasi, dan memberikan informasi.
-
-ATURAN:
-- Bahasa Indonesia informal tapi sopan
-- Maksimal 3 kalimat per balasan
-- Jika laporan darurat (kebakaran, banjir, kecelakaan, kriminal): 
-  balas dengan instruksi darurat dan tulis [DARURAT] di awal pesan
-- Selalu minta informasi: lokasi RT/RW, deskripsi masalah
-- Jika warga kirim foto: konfirmasi foto diterima dan minta deskripsi
-- Jangan berikan informasi sensitif atau politik
-- Jika tidak tahu jawaban: arahkan ke petugas kelurahan
-
-KATEGORI LAPORAN:
-- infrastruktur (jalan rusak, lampu mati, saluran tersumbat)
-- sosial (konflik warga, kebisingan, keamanan)
-- ekonomi (bantuan sosial, UMKM)
-- kesehatan (lingkungan kotor, wabah)
-- darurat (kebakaran, banjir, kecelakaan)`;
-
 let globalSocket: ReturnType<typeof makeWASocket> | null = null;
 let isConnected = false;
+
+function normalizeWANumber(jid: string): string {
+  let num = jid
+    .replace("@s.whatsapp.net", "")
+    .replace("@c.us", "")
+    .replace("@lid", "")
+    .trim();
+
+  if (!/^\d+$/.test(num) || num.length > 15) {
+    return jid;
+  }
+
+  if (num.startsWith("08")) {
+    num = "62" + num.slice(1);
+  }
+
+  return num;
+}
+
+async function forwardEmergencyToKoordinator(params: {
+  sock: ReturnType<typeof makeWASocket>;
+  rtId: number;
+  laporanId: number;
+  from: string;
+  body: string;
+}): Promise<void> {
+  const { sock, rtId, laporanId, from, body } = params;
+  const ctx = await resolveSenderContext(from);
+  const laporan = await prisma.laporanWarga.findUnique({ where: { id: laporanId } });
+  if (!laporan) return;
+
+  const phones = await resolveKoordinatorRtPhones(rtId);
+  if (phones.length === 0) {
+    console.warn(`[WhatsApp AI] Tidak ada nomor koordinator RT ${rtId} untuk forward darurat`);
+    return;
+  }
+
+  const text = buildKoordinatorForwardText(laporan, ctx, body);
+
+  for (const phone of phones) {
+    const jid = jidFromPhone(phone);
+    if (!jid) continue;
+    try {
+      await sock.sendMessage(jid, { text });
+      console.log(`[WhatsApp AI] ✓ Forward darurat ke koordinator ${phone}`);
+    } catch (err) {
+      console.error(`[WhatsApp AI] Gagal forward ke ${phone}:`, err);
+    }
+  }
+}
 
 export async function startWhatsappAI(): Promise<void> {
   const authPath = path.join(process.cwd(), "wa-auth");
@@ -61,7 +97,7 @@ export async function startWhatsappAI(): Promise<void> {
       qrcode.generate(qr, { small: true });
 
       console.log("══════════════════════════════════════════");
-      console.log("  Buka WA 08131876268");
+      console.log("  Buka WA", process.env.WA_PHONE_NUMBER ?? "08131876268");
       console.log("  ⋮ → Linked Devices → Link a Device");
       console.log("  Arahkan kamera ke QR di atas");
       console.log("══════════════════════════════════════════\n");
@@ -159,54 +195,73 @@ export async function startWhatsappAI(): Promise<void> {
             ? "location"
             : "text";
 
-      console.log(`[WhatsApp AI] Pesan dari ${from}: ${body.substring(0, 50)}...`);
+      const displayBody = body || `[${messageType}]`;
+      const normalizedFrom = normalizeWANumber(from);
+      console.log(`[WhatsApp AI] Pesan dari ${normalizedFrom}: ${displayBody.substring(0, 50)}...`);
 
       const saved = await prisma.whatsappMessage.create({
         data: {
           sessionId: "main",
-          from,
+          from: normalizedFrom,
           messageType,
-          body: body || `[${messageType}]`,
+          body: displayBody,
           aiProcessed: false,
         },
       });
 
       try {
-        const aiResult = await callAI(
-          SYSTEM_PROMPT,
-          `Pesan dari warga: "${body || `[mengirim ${messageType}]`}"`,
-          300
-        );
+        const result = await processWhatsAppLaporan({
+          jid: from,
+          body: displayBody,
+          messageType,
+        });
 
-        const replyText = aiResult.text;
-        const isEmergency = replyText.includes("[DARURAT]");
-
-        await sock.sendMessage(from, { text: replyText });
+        await sock.sendMessage(from, { text: result.replyText });
 
         await prisma.whatsappMessage.update({
           where: { id: saved.id },
-          data: { aiProcessed: true, aiReply: replyText },
+          data: {
+            aiProcessed: true,
+            aiReply: result.replyText,
+            laporanId: result.laporanId != null ? String(result.laporanId) : null,
+          },
         });
 
-        if (isEmergency) {
-          await prisma.aiAlert.create({
-            data: {
-              alertType: "emergency",
-              severity: "critical",
-              wilayahScope: "rt",
-              wilayahId: "unknown",
-              title: "🚨 DARURAT via WhatsApp",
-              description: `Pesan darurat dari ${from}: ${body}`,
-              payload: {
-                from,
-                messageId: saved.id,
-                originalMessage: body,
-                aiReply: replyText,
-              },
-            },
+        if (result.isEmergency) {
+          await createEmergencyAlert({
+            from,
+            body: displayBody,
+            replyText: result.replyText,
+            messageId: saved.id,
+            laporanId: result.laporanId,
+            rtId: result.rtId,
           });
 
-          console.warn(`[WhatsApp AI] 🚨 DARURAT terdeteksi dari ${from}`);
+          if (result.rtId != null) {
+            if (result.laporanId != null) {
+              await forwardEmergencyToKoordinator({
+                sock,
+                rtId: result.rtId,
+                laporanId: result.laporanId,
+                from,
+                body: displayBody,
+              });
+            } else {
+              const phones = await resolveKoordinatorRtPhones(result.rtId);
+              const ctx = await resolveSenderContext(from);
+              const text =
+                `🚨 *LAPORAN DARURAT JAKDATA (belum terdaftar formal)*\n\n` +
+                `Dari: ${ctx.warga?.nama ?? "Warga"} (${ctx.phone})\n` +
+                `Wilayah: ${ctx.wilayahLabel}\n\n` +
+                `Pesan:\n${displayBody.substring(0, 400)}`;
+              for (const phone of phones) {
+                const jid = jidFromPhone(phone);
+                if (jid) await sock.sendMessage(jid, { text }).catch(() => undefined);
+              }
+            }
+          }
+
+          console.warn(`[WhatsApp AI] 🚨 DARURAT — laporan ${result.laporanId ?? "n/a"} dari ${from}`);
         }
 
         console.log(`[WhatsApp AI] ✓ Balasan terkirim ke ${from}`);

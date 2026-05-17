@@ -20,7 +20,6 @@ import { WarmindoApp } from './pages/warmindo/WarmindoApp';
 import { UnauthorizedPage } from './pages/UnauthorizedPage';
 import WrongApp from './pages/WrongApp';
 import { ProtectedRoute } from './router/ProtectedRoute';
-import CommandCenter from './pages/CommandCenter';
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -40,14 +39,7 @@ function RootRedirect() {
 function CommandRoutes() {
   return (
     <>
-      <Route
-        path="/command-center"
-        element={
-          <ProtectedRoute allowedRoles={[...COMMAND_ROLES]}>
-            <CommandCenter />
-          </ProtectedRoute>
-        }
-      />
+      <Route path="/command-center" element={<Navigate to="/admin/command-center" replace />} />
       <Route path="/command/*" element={<Navigate to="/admin/home" replace />} />
       <Route path="/admin" element={<Navigate to="/admin/home" replace />} />
       <Route

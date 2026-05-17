@@ -161,6 +161,24 @@ function HealthScoreCard({ score }: { score: HealthScore }) {
   );
 }
 
+function formatWANumber(from: string): string {
+  let num = from
+    .replace("@s.whatsapp.net", "")
+    .replace("@lid", "")
+    .replace("@c.us", "")
+    .trim();
+
+  if (!/^\d+$/.test(num) || num.length > 15) {
+    return "Pengirim WA (ID internal)";
+  }
+
+  if (num.startsWith("62")) {
+    num = "0" + num.slice(2);
+  }
+
+  return num;
+}
+
 export default function CommandCenter() {
   const [alerts, setAlerts] = useState<AiAlert[]>([]);
   const [recommendations, setRecommendations] = useState<AiRecommendation[]>([]);
@@ -368,7 +386,7 @@ export default function CommandCenter() {
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                         <span style={{ color: "#16a34a", fontSize: 12, fontWeight: 600 }}>
-                          💬 {msg.from.replace("@s.whatsapp.net", "").replace("@lid", "")}
+                          💬 {formatWANumber(msg.from)}
                         </span>
                         <div style={{ display: "flex", gap: 8 }}>
                           <span
