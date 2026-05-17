@@ -22,18 +22,23 @@ let globalSocket: ReturnType<typeof makeWASocket> | null = null;
 let isConnected = false;
 
 function normalizeWANumber(jid: string): string {
+  if (!jid) return jid;
+
+  if (jid.includes("@lid")) {
+    return "lid-internal";
+  }
+
   let num = jid
     .replace("@s.whatsapp.net", "")
     .replace("@c.us", "")
-    .replace("@lid", "")
     .trim();
 
-  if (!/^\d+$/.test(num) || num.length > 15) {
-    return jid;
-  }
+  if (!/^\d+$/.test(num)) return "unknown";
+
+  if (num.length > 15) return "lid-internal";
 
   if (num.startsWith("08")) {
-    num = "62" + num.slice(1);
+    return "62" + num.slice(1);
   }
 
   return num;
@@ -181,11 +186,25 @@ export async function startWhatsappAI(): Promise<void> {
 
       if (from.includes("@g.us")) continue;
 
+      // Skip pesan dari nomor WA sistem sendiri
+      const ownNumber = process.env.WA_PHONE_NUMBER ?? "08131876268";
+      const ownJid = "62" + ownNumber.slice(1);
+      if (from.includes(ownJid) || from.includes(ownNumber)) {
+        console.log("[WhatsApp AI] Skip pesan dari nomor sendiri");
+        continue;
+      }
+
       const body =
         msg.message.conversation ??
         msg.message.extendedTextMessage?.text ??
         msg.message.imageMessage?.caption ??
         "";
+
+      // Skip pesan kosong atau tidak ada konten
+      if (!body || body.trim() === "" || body === "[text]") {
+        console.log("[WhatsApp AI] Skip pesan kosong");
+        continue;
+      }
 
       const messageType = msg.message.imageMessage
         ? "image"
