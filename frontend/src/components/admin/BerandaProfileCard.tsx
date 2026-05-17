@@ -142,7 +142,7 @@ export default function BerandaProfileCard() {
             <img src="/zulkifli-hasan.jpg" alt="Zulkifli Hasan" style={PHOTO} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={NAME}>
-                Zulkifli Hasan,<br />S.E., M.M.
+                Dr. (H.C.) H. Zulkifli Hasan, S.E., M.M.
               </div>
               <div style={DIVIDER} />
               <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)" }}>
@@ -177,7 +177,7 @@ export default function BerandaProfileCard() {
             <img src="/sigit-purnomo-said.jpg" alt="Sigit Purnomo Said" style={PHOTO} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={NAME}>
-                Sigit Purnomo Said,<br />S.A.P., S.H.
+                Sigit Purnomo Said, S.AP., S.H.
               </div>
               <div style={DIVIDER} />
               <div style={{
