@@ -76,7 +76,7 @@ function ScoreBar({ value, color }: { value: number; color: string }) {
         style={{
           flex: 1,
           height: 6,
-          background: "#374151",
+          background: "#e5e7eb",
           borderRadius: 3,
           overflow: "hidden",
         }}
@@ -90,7 +90,7 @@ function ScoreBar({ value, color }: { value: number; color: string }) {
           }}
         />
       </div>
-      <span style={{ fontSize: 12, color: "#9ca3af", minWidth: 30 }}>{Math.round(value)}</span>
+      <span style={{ fontSize: 12, color: "#6b7280", minWidth: 30 }}>{Math.round(value)}</span>
     </div>
   );
 }
@@ -122,16 +122,16 @@ function RecommendationCard({ rec }: { rec: AiRecommendation }) {
   const cfg = PRIORITY_CONFIG[rec.priority] ?? PRIORITY_CONFIG.medium;
   const [expanded, setExpanded] = useState(false);
   return (
-    <div style={{ background: "#111827", border: "1px solid #1f2937", borderRadius: 8, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
+    <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px 14px", marginBottom: 8, cursor: "pointer" }} onClick={() => setExpanded(!expanded)}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: `${cfg.color}22`, padding: "2px 6px", borderRadius: 4 }}>{cfg.label.toUpperCase()}</span>
-          <span style={{ fontSize: 10, color: "#6b7280", background: "#1f2937", padding: "2px 6px", borderRadius: 4 }}>{rec.category.toUpperCase()}</span>
+          <span style={{ fontSize: 10, color: "#6b7280", background: "#f3f4f6", padding: "2px 6px", borderRadius: 4 }}>{rec.category.toUpperCase()}</span>
         </div>
         <span style={{ fontSize: 12, color: "#6b7280" }}>{expanded ? "▲" : "▼"}</span>
       </div>
-      <p style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600, margin: 0 }}>{rec.title}</p>
-      {expanded && <p style={{ color: "#9ca3af", fontSize: 12, margin: 0, marginTop: 8, lineHeight: 1.6, whiteSpace: "pre-line" }}>{rec.body}</p>}
+      <p style={{ color: "#111827", fontSize: 13, fontWeight: 600, margin: 0 }}>{rec.title}</p>
+      {expanded && <p style={{ color: "#4b5563", fontSize: 12, margin: 0, marginTop: 8, lineHeight: 1.6, whiteSpace: "pre-line" }}>{rec.body}</p>}
       <p style={{ fontSize: 11, color: "#4b5563", margin: 0, marginTop: 6 }}>{new Date(rec.createdAt).toLocaleString("id-ID")}</p>
     </div>
   );
@@ -141,10 +141,10 @@ function HealthScoreCard({ score }: { score: HealthScore }) {
   const overall = score.overallScore;
   const color = overall >= 70 ? "#22c55e" : overall >= 50 ? "#f59e0b" : overall >= 30 ? "#ef4444" : "#a855f7";
   return (
-    <div style={{ background: "#111827", border: `1px solid ${color}44`, borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
+    <div style={{ background: "#fff", border: `1px solid ${color}44`, borderRadius: 8, padding: "12px 14px", marginBottom: 8 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
         <div>
-          <p style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600, margin: 0 }}>{score.wilayahType.toUpperCase()} {score.wilayahId}</p>
+          <p style={{ color: "#111827", fontSize: 13, fontWeight: 600, margin: 0 }}>{score.wilayahType.toUpperCase()} {score.wilayahId}</p>
           <p style={{ color: "#6b7280", fontSize: 11, margin: 0 }}>{score.period}</p>
         </div>
         <div style={{ fontSize: 24, fontWeight: 700, color, minWidth: 50, textAlign: "right" }}>{Math.round(overall)}</div>
@@ -224,23 +224,23 @@ export default function CommandCenter() {
 
   const tabStyle = (active: boolean) => ({
     padding: "8px 16px",
-    background: active ? "#1d4ed8" : "transparent",
-    border: active ? "1px solid #2563eb" : "1px solid #374151",
+    background: active ? "#1d4ed8" : "#fff",
+    border: active ? "1px solid #2563eb" : "1px solid #d1d5db",
     borderRadius: 6,
-    color: active ? "#fff" : "#9ca3af",
+    color: active ? "#fff" : "#4b5563",
     cursor: "pointer",
     fontSize: 13,
     fontWeight: active ? 600 : 400,
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#030712", color: "#f9fafb", fontFamily: "system-ui, sans-serif", padding: 24 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid #1f2937" }}>
+    <div style={{ padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, paddingBottom: 16, borderBottom: "1px solid #e5e7eb" }}>
         <div>
-          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#f9fafb" }}>🧠 JAKDATA Command Center</h1>
+          <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#111827" }}>🧠 JAKDATA Command Center</h1>
           <p style={{ margin: 0, fontSize: 12, color: "#6b7280", marginTop: 4 }}>Territorial Intelligence AI — Update: {lastUpdate.toLocaleTimeString("id-ID")}</p>
         </div>
-        <button type="button" onClick={fetchData} style={{ background: "#1f2937", border: "1px solid #374151", color: "#9ca3af", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13 }}>↻ Refresh</button>
+        <button type="button" onClick={fetchData} style={{ background: "#fff", border: "1px solid #d1d5db", color: "#374151", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13 }}>↻ Refresh</button>
       </div>
 
       {aiStatus && (
@@ -250,8 +250,8 @@ export default function CommandCenter() {
             gap: 16,
             marginBottom: 16,
             padding: "10px 16px",
-            background: "#111827",
-            border: "1px solid #1f2937",
+            background: "#fff",
+            border: "1px solid #e5e7eb",
             borderRadius: 8,
             fontSize: 12,
             flexWrap: "wrap",
@@ -266,9 +266,9 @@ export default function CommandCenter() {
             {aiStatus.email?.active ? "●" : "○"} Email {aiStatus.email?.address ?? "jakdatabmpan@gmail.com"}
           </span>
           <span style={{ color: "#6b7280" }}>|</span>
-          <span style={{ color: "#9ca3af" }}>💬 {aiStatus.stats?.totalWhatsappMessages ?? 0} pesan WA</span>
-          <span style={{ color: "#9ca3af" }}>📧 {aiStatus.stats?.totalEmails ?? 0} email</span>
-          <span style={{ color: "#9ca3af" }}>🔴 {aiStatus.stats?.activeAlerts ?? 0} alert aktif</span>
+          <span style={{ color: "#4b5563" }}>💬 {aiStatus.stats?.totalWhatsappMessages ?? 0} pesan WA</span>
+          <span style={{ color: "#4b5563" }}>📧 {aiStatus.stats?.totalEmails ?? 0} email</span>
+          <span style={{ color: "#4b5563" }}>🔴 {aiStatus.stats?.activeAlerts ?? 0} alert aktif</span>
           <span style={{ marginLeft: "auto", color: "#4b5563", fontSize: 11 }}>Auto refresh 30 detik</span>
         </div>
       )}
@@ -280,7 +280,7 @@ export default function CommandCenter() {
           { label: "Rekomendasi Urgent", value: highPriorityRecs, color: "#f59e0b", icon: "💡" },
           { label: "Wilayah Kritis", value: criticalScores, color: "#3b82f6", icon: "📍" },
         ].map((stat) => (
-          <div key={stat.label} style={{ background: "#111827", border: `1px solid ${stat.color}33`, borderRadius: 10, padding: "16px", textAlign: "center" }}>
+          <div key={stat.label} style={{ background: "#fff", border: `1px solid ${stat.color}33`, borderRadius: 10, padding: "16px", textAlign: "center" }}>
             <div style={{ fontSize: 24, marginBottom: 4 }}>{stat.icon}</div>
             <div style={{ fontSize: 28, fontWeight: 700, color: stat.color }}>{loading ? "—" : stat.value}</div>
             <div style={{ fontSize: 11, color: "#6b7280", marginTop: 2 }}>{stat.label}</div>
@@ -296,7 +296,7 @@ export default function CommandCenter() {
         <button type="button" style={tabStyle(activeTab === "email")} onClick={() => setActiveTab("email")}>📧 Email ({emailMessages.length})</button>
       </div>
 
-      <div style={{ background: "#0f172a", border: "1px solid #1f2937", borderRadius: 10, padding: 16, minHeight: 400 }}>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 10, padding: 16, minHeight: 400 }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: 60, color: "#6b7280" }}>
             <div style={{ fontSize: 32, marginBottom: 12 }}>⏳</div>
@@ -359,15 +359,15 @@ export default function CommandCenter() {
                     <div
                       key={msg.id}
                       style={{
-                        background: "#111827",
-                        border: "1px solid #1f2937",
+                        background: "#fff",
+                        border: "1px solid #e5e7eb",
                         borderRadius: 8,
                         padding: "12px 14px",
                         marginBottom: 8,
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <span style={{ color: "#22c55e", fontSize: 12, fontWeight: 600 }}>
+                        <span style={{ color: "#16a34a", fontSize: 12, fontWeight: 600 }}>
                           💬 {msg.from.replace("@s.whatsapp.net", "").replace("@lid", "")}
                         </span>
                         <div style={{ display: "flex", gap: 8 }}>
@@ -387,21 +387,21 @@ export default function CommandCenter() {
                           </span>
                         </div>
                       </div>
-                      <p style={{ color: "#e5e7eb", fontSize: 13, margin: 0, marginBottom: msg.aiReply ? 8 : 0 }}>
+                      <p style={{ color: "#374151", fontSize: 13, margin: 0, marginBottom: msg.aiReply ? 8 : 0 }}>
                         {msg.body ?? ""}
                       </p>
                       {msg.aiReply && (
                         <div
                           style={{
-                            background: "#0f172a",
-                            border: "1px solid #1e3a5f",
+                            background: "#eff6ff",
+                            border: "1px solid #bfdbfe",
                             borderRadius: 6,
                             padding: "8px 12px",
                             marginTop: 8,
                           }}
                         >
-                          <span style={{ fontSize: 10, color: "#3b82f6", fontWeight: 600 }}>🤖 AI Reply:</span>
-                          <p style={{ color: "#93c5fd", fontSize: 12, margin: 0, marginTop: 4 }}>{msg.aiReply}</p>
+                          <span style={{ fontSize: 10, color: "#2563eb", fontWeight: 600 }}>🤖 AI Reply:</span>
+                          <p style={{ color: "#1e40af", fontSize: 12, margin: 0, marginTop: 4 }}>{msg.aiReply}</p>
                         </div>
                       )}
                     </div>
@@ -424,15 +424,15 @@ export default function CommandCenter() {
                     <div
                       key={email.id}
                       style={{
-                        background: "#111827",
-                        border: "1px solid #1f2937",
+                        background: "#fff",
+                        border: "1px solid #e5e7eb",
                         borderRadius: 8,
                         padding: "12px 14px",
                         marginBottom: 8,
                       }}
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                        <span style={{ color: "#f59e0b", fontSize: 12, fontWeight: 600 }}>📧 {email.fromAddress}</span>
+                        <span style={{ color: "#d97706", fontSize: 12, fontWeight: 600 }}>📧 {email.fromAddress}</span>
                         <div style={{ display: "flex", gap: 8 }}>
                           {email.aiCategory && (
                             <span
@@ -451,7 +451,7 @@ export default function CommandCenter() {
                             style={{
                               fontSize: 10,
                               color: email.aiReplySent ? "#22c55e" : "#6b7280",
-                              background: email.aiReplySent ? "#052e16" : "#1f2937",
+                              background: email.aiReplySent ? "#dcfce7" : "#f3f4f6",
                               padding: "2px 6px",
                               borderRadius: 4,
                             }}
@@ -463,11 +463,11 @@ export default function CommandCenter() {
                           </span>
                         </div>
                       </div>
-                      <p style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 4 }}>
+                      <p style={{ color: "#111827", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 4 }}>
                         {email.subject}
                       </p>
                       {email.aiSummary && (
-                        <p style={{ color: "#9ca3af", fontSize: 12, margin: 0 }}>{email.aiSummary}</p>
+                        <p style={{ color: "#4b5563", fontSize: 12, margin: 0 }}>{email.aiSummary}</p>
                       )}
                     </div>
                   ))

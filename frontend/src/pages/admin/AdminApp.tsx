@@ -6,10 +6,11 @@ import AdminHome from './AdminHome';
 import { AdminWarga, AdminLaporan, AdminWarmindo, AdminBantuan, AdminAI, AdminWilayah } from './AdminPages';
 import { AdminKoordinator } from './AdminKoordinator';
 import { AdminPasswordReset } from './AdminPasswordReset';
+import CommandCenter from '../CommandCenter';
 
 const NAV = [
   { path: 'home', label: 'Beranda', icon: '🏠' },
-  { path: '/command-center', label: 'Command Center AI', icon: '🧠', external: true },
+  { path: 'command-center', label: 'Command Center AI', icon: '🧠' },
   { path: 'dashboard', label: 'Dashboard', icon: '📊' },
   { path: 'wilayah', label: 'Wilayah', icon: '🗺️' },
   { path: 'laporan', label: 'Laporan', icon: '📋' },
@@ -51,7 +52,7 @@ export function AdminApp() {
           {(user?.role === 'admin_pusat' ? NAV : NAV.filter((item) => item.path !== 'password-reset')).map((item) => (
             <NavLink
               key={item.path}
-              to={item.external ? item.path : `/admin/${item.path}`}
+              to={`/admin/${item.path}`}
               end={item.path === 'home'}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
@@ -118,6 +119,7 @@ export function AdminApp() {
           <Routes>
             <Route index element={<Navigate to="home" replace />} />
             <Route path="home" element={<AdminHome />} />
+            <Route path="command-center" element={<CommandCenter />} />
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="wilayah" element={<AdminWilayah />} />
             <Route path="koordinator" element={<AdminKoordinator />} />
