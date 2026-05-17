@@ -1,5 +1,12 @@
 import React from "react";
 
+const CARD_STYLE = {
+  background: "rgba(0, 56, 168, 0.4)",
+  border: "1px solid rgba(255,255,255,0.3)",
+  borderRadius: 18,
+  padding: 28,
+};
+
 const Badge = ({ text }: { text: string }) => (
   <span style={{
     background: "rgba(255,255,255,0.15)",
@@ -21,15 +28,16 @@ const FocusItem = ({ icon, label }: { icon: string; label: string }) => (
     display: "flex",
     alignItems: "center",
     gap: 8,
-    background: "rgba(255,255,255,0.12)",
-    border: "1px solid rgba(255,255,255,0.2)",
+    background: "rgba(255,255,255,0.15)",
+    border: "1px solid rgba(255,255,255,0.25)",
     borderRadius: 8,
     padding: "7px 12px",
     color: "white",
     fontSize: 12,
+    fontWeight: 500,
   }}>
-    <span style={{ fontSize: 15 }}>{icon}</span>
-    {label}
+    <span style={{ fontSize: 15, flexShrink: 0 }}>{icon}</span>
+    <span style={{ color: "white" }}>{label}</span>
   </div>
 );
 
@@ -72,13 +80,7 @@ export default function BerandaProfileCard() {
       }}>
 
         {/* CARD KIRI — Zulkifli Hasan */}
-        <div style={{
-          background: "rgba(255,255,255,0.10)",
-          border: "1px solid rgba(255,255,255,0.25)",
-          borderRadius: 18,
-          padding: 28,
-          backdropFilter: "blur(12px)",
-        }}>
+        <div style={CARD_STYLE}>
           {/* Badge row */}
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <Badge text="KETUA UMUM PAN" />
@@ -143,13 +145,7 @@ export default function BerandaProfileCard() {
         </div>
 
         {/* CARD KANAN — Sigit Purnomo Said */}
-        <div style={{
-          background: "rgba(255,255,255,0.10)",
-          border: "1px solid rgba(255,255,255,0.25)",
-          borderRadius: 18,
-          padding: 28,
-          backdropFilter: "blur(12px)",
-        }}>
+        <div style={CARD_STYLE}>
           {/* Badge row */}
           <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
             <Badge text="KETUA UMUM BM PAN" />

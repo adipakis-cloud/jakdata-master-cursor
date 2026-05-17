@@ -200,6 +200,21 @@ export async function startWhatsappAI(): Promise<void> {
         msg.message.imageMessage?.caption ??
         "";
 
+      const isAutoReply =
+        body.includes("_Sent via fonnte") ||
+        body.includes("_Sent via") ||
+        body.toUpperCase().includes("AIGPRE") ||
+        body.includes("no-reply@") ||
+        body.includes("noreply@") ||
+        (body.includes("platform perdagangan") && body.includes("B2B")) ||
+        (body.toLowerCase().includes("automatic reply") &&
+          body.toLowerCase().includes("office"));
+
+      if (isAutoReply) {
+        console.log("[WhatsApp AI] Skip auto-reply / pesan sistem");
+        continue;
+      }
+
       // Skip pesan kosong atau tidak ada konten
       if (!body || body.trim() === "" || body === "[text]") {
         console.log("[WhatsApp AI] Skip pesan kosong");
@@ -217,6 +232,19 @@ export async function startWhatsappAI(): Promise<void> {
       const displayBody = body || `[${messageType}]`;
       const normalizedFrom = normalizeWANumber(from);
       console.log(`[WhatsApp AI] Pesan dari ${normalizedFrom}: ${displayBody.substring(0, 50)}...`);
+
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const recentCount = await prisma.whatsappMessage.count({
+        where: {
+          from: normalizedFrom,
+          receivedAt: { gte: fiveMinutesAgo },
+          aiProcessed: true,
+        },
+      });
+      if (recentCount >= 10) {
+        console.log("[WhatsApp AI] Rate limit — skip (terlalu banyak pesan dalam 5 menit)");
+        continue;
+      }
 
       const saved = await prisma.whatsappMessage.create({
         data: {
