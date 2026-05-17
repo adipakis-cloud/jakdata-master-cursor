@@ -36,6 +36,26 @@ interface HealthScore {
   calculatedAt: string;
 }
 
+interface WhatsappMsg {
+  id: string;
+  from: string;
+  body: string | null;
+  aiReply: string | null;
+  aiProcessed: boolean;
+  messageType: string;
+  receivedAt: string;
+}
+
+interface EmailMsg {
+  id: string;
+  fromAddress: string;
+  subject: string;
+  aiCategory: string | null;
+  aiSummary: string | null;
+  aiReplySent: boolean;
+  receivedAt: string;
+}
+
 const SEVERITY_CONFIG = {
   low: { color: "#22c55e", bg: "#052e16", label: "RENDAH" },
   medium: { color: "#f59e0b", bg: "#1c1008", label: "SEDANG" },
@@ -145,23 +165,35 @@ export default function CommandCenter() {
   const [alerts, setAlerts] = useState<AiAlert[]>([]);
   const [recommendations, setRecommendations] = useState<AiRecommendation[]>([]);
   const [healthScores, setHealthScores] = useState<HealthScore[]>([]);
+  const [waMessages, setWaMessages] = useState<WhatsappMsg[]>([]);
+  const [emailMessages, setEmailMessages] = useState<EmailMsg[]>([]);
+  const [aiStatus, setAiStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  const [activeTab, setActiveTab] = useState<"alerts" | "recs" | "health">("alerts");
+  const [activeTab, setActiveTab] = useState<"alerts" | "recs" | "health" | "wa" | "email">("alerts");
 
   const fetchData = useCallback(async () => {
     try {
-      const [alertsRes, recsRes, scoresRes] = await Promise.all([
+      const [alertsRes, recsRes, scoresRes, waRes, emailRes, statusRes] = await Promise.all([
         api.get("/ai/alerts", { params: { limit: 30 } }),
         api.get("/ai/engine-recommendations"),
         api.get("/ai/health-scores", { params: { wilayahType: "rt" } }),
+        api.get("/ai/whatsapp-messages"),
+        api.get("/ai/email-messages"),
+        api.get("/ai/status"),
       ]);
       const alertsJson = alertsRes.data;
       const recsJson = recsRes.data;
       const scoresJson = scoresRes.data;
+      const waJson = waRes.data;
+      const emailJson = emailRes.data;
+      const statusJson = statusRes.data;
       if (alertsJson.success) setAlerts(alertsJson.data ?? []);
       if (recsJson.success) setRecommendations(recsJson.data ?? []);
       if (scoresJson.success) setHealthScores(scoresJson.data ?? []);
+      if (waJson.success) setWaMessages(waJson.data ?? []);
+      if (emailJson.success) setEmailMessages(emailJson.data ?? []);
+      if (statusJson.success) setAiStatus(statusJson.data);
       setLastUpdate(new Date());
     } catch (err) {
       console.error("[CommandCenter] Fetch error:", err);
@@ -211,6 +243,36 @@ export default function CommandCenter() {
         <button type="button" onClick={fetchData} style={{ background: "#1f2937", border: "1px solid #374151", color: "#9ca3af", borderRadius: 8, padding: "8px 16px", cursor: "pointer", fontSize: 13 }}>↻ Refresh</button>
       </div>
 
+      {aiStatus && (
+        <div
+          style={{
+            display: "flex",
+            gap: 16,
+            marginBottom: 16,
+            padding: "10px 16px",
+            background: "#111827",
+            border: "1px solid #1f2937",
+            borderRadius: 8,
+            fontSize: 12,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <span style={{ color: "#6b7280" }}>🤖 AI Status:</span>
+          <span style={{ color: aiStatus.whatsapp?.connected ? "#22c55e" : "#ef4444" }}>
+            {aiStatus.whatsapp?.connected ? "●" : "○"} WA {aiStatus.whatsapp?.phone ?? "08131876268"}
+          </span>
+          <span style={{ color: aiStatus.email?.active ? "#22c55e" : "#6b7280" }}>
+            {aiStatus.email?.active ? "●" : "○"} Email {aiStatus.email?.address ?? "jakdatabmpan@gmail.com"}
+          </span>
+          <span style={{ color: "#6b7280" }}>|</span>
+          <span style={{ color: "#9ca3af" }}>💬 {aiStatus.stats?.totalWhatsappMessages ?? 0} pesan WA</span>
+          <span style={{ color: "#9ca3af" }}>📧 {aiStatus.stats?.totalEmails ?? 0} email</span>
+          <span style={{ color: "#9ca3af" }}>🔴 {aiStatus.stats?.activeAlerts ?? 0} alert aktif</span>
+          <span style={{ marginLeft: "auto", color: "#4b5563", fontSize: 11 }}>Auto refresh 30 detik</span>
+        </div>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
           { label: "Alert Kritis", value: criticalCount, color: "#a855f7", icon: "🔴" },
@@ -230,6 +292,8 @@ export default function CommandCenter() {
         <button type="button" style={tabStyle(activeTab === "alerts")} onClick={() => setActiveTab("alerts")}>🔔 Alert AI ({alerts.length})</button>
         <button type="button" style={tabStyle(activeTab === "recs")} onClick={() => setActiveTab("recs")}>💡 Rekomendasi ({recommendations.length})</button>
         <button type="button" style={tabStyle(activeTab === "health")} onClick={() => setActiveTab("health")}>📊 Health Score ({healthScores.length})</button>
+        <button type="button" style={tabStyle(activeTab === "wa")} onClick={() => setActiveTab("wa")}>💬 WhatsApp ({waMessages.length})</button>
+        <button type="button" style={tabStyle(activeTab === "email")} onClick={() => setActiveTab("email")}>📧 Email ({emailMessages.length})</button>
       </div>
 
       <div style={{ background: "#0f172a", border: "1px solid #1f2937", borderRadius: 10, padding: 16, minHeight: 400 }}>
@@ -277,6 +341,136 @@ export default function CommandCenter() {
                   </div>
                 ) : (
                   healthScores.map((s) => <HealthScoreCard key={s.id} score={s} />)
+                )}
+              </div>
+            )}
+            {activeTab === "wa" && (
+              <div>
+                <p style={{ color: "#6b7280", fontSize: 12, marginBottom: 12 }}>
+                  {waMessages.length} pesan WhatsApp masuk — nomor: 08131876268
+                </p>
+                {waMessages.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>💬</div>
+                    <p>Belum ada pesan WhatsApp masuk</p>
+                  </div>
+                ) : (
+                  waMessages.map((msg) => (
+                    <div
+                      key={msg.id}
+                      style={{
+                        background: "#111827",
+                        border: "1px solid #1f2937",
+                        borderRadius: 8,
+                        padding: "12px 14px",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ color: "#22c55e", fontSize: 12, fontWeight: 600 }}>
+                          💬 {msg.from.replace("@s.whatsapp.net", "").replace("@lid", "")}
+                        </span>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: msg.aiProcessed ? "#22c55e" : "#f59e0b",
+                              background: msg.aiProcessed ? "#052e16" : "#1c1008",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            {msg.aiProcessed ? "✓ AI Replied" : "⏳ Pending"}
+                          </span>
+                          <span style={{ fontSize: 11, color: "#6b7280" }}>
+                            {new Date(msg.receivedAt).toLocaleString("id-ID")}
+                          </span>
+                        </div>
+                      </div>
+                      <p style={{ color: "#e5e7eb", fontSize: 13, margin: 0, marginBottom: msg.aiReply ? 8 : 0 }}>
+                        {msg.body ?? ""}
+                      </p>
+                      {msg.aiReply && (
+                        <div
+                          style={{
+                            background: "#0f172a",
+                            border: "1px solid #1e3a5f",
+                            borderRadius: 6,
+                            padding: "8px 12px",
+                            marginTop: 8,
+                          }}
+                        >
+                          <span style={{ fontSize: 10, color: "#3b82f6", fontWeight: 600 }}>🤖 AI Reply:</span>
+                          <p style={{ color: "#93c5fd", fontSize: 12, margin: 0, marginTop: 4 }}>{msg.aiReply}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            {activeTab === "email" && (
+              <div>
+                <p style={{ color: "#6b7280", fontSize: 12, marginBottom: 12 }}>
+                  {emailMessages.length} email masuk — jakdatabmpan@gmail.com
+                </p>
+                {emailMessages.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: 40, color: "#6b7280" }}>
+                    <div style={{ fontSize: 32, marginBottom: 8 }}>📧</div>
+                    <p>Belum ada email masuk</p>
+                  </div>
+                ) : (
+                  emailMessages.map((email) => (
+                    <div
+                      key={email.id}
+                      style={{
+                        background: "#111827",
+                        border: "1px solid #1f2937",
+                        borderRadius: 8,
+                        padding: "12px 14px",
+                        marginBottom: 8,
+                      }}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                        <span style={{ color: "#f59e0b", fontSize: 12, fontWeight: 600 }}>📧 {email.fromAddress}</span>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          {email.aiCategory && (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                color: "#a78bfa",
+                                background: "#1e1040",
+                                padding: "2px 6px",
+                                borderRadius: 4,
+                              }}
+                            >
+                              {email.aiCategory}
+                            </span>
+                          )}
+                          <span
+                            style={{
+                              fontSize: 10,
+                              color: email.aiReplySent ? "#22c55e" : "#6b7280",
+                              background: email.aiReplySent ? "#052e16" : "#1f2937",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            {email.aiReplySent ? "✓ Replied" : "No Reply"}
+                          </span>
+                          <span style={{ fontSize: 11, color: "#6b7280" }}>
+                            {new Date(email.receivedAt).toLocaleString("id-ID")}
+                          </span>
+                        </div>
+                      </div>
+                      <p style={{ color: "#e5e7eb", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 4 }}>
+                        {email.subject}
+                      </p>
+                      {email.aiSummary && (
+                        <p style={{ color: "#9ca3af", fontSize: 12, margin: 0 }}>{email.aiSummary}</p>
+                      )}
+                    </div>
+                  ))
                 )}
               </div>
             )}
