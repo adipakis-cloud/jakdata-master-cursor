@@ -493,16 +493,5 @@ async function processDesignJob(jobId: number, inputData: any) {
     await prisma.designJob.update({ where: { id: jobId }, data: { status: 'failed' } });
   }
 
-  app.post("/api/ai/whatsapp-reconnect", async (request, reply) => {
-    try {
-      await prisma.whatsappSession.upsert({
-        where: { sessionKey: "main" },
-        update: { status: "disconnected", qrCode: null, lastSeen: new Date() },
-        create: { sessionKey: "main", status: "disconnected" },
-      });
-      return reply.send({ success: true, message: "Session direset." });
-    } catch (err) {
-      return reply.status(500).send({ success: false, message: "Gagal reset session" });
-    }
-  });
 }
+
