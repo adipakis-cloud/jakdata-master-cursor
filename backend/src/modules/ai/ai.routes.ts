@@ -1,4 +1,4 @@
-import { FastifyInstance } from 'fastify';
+﻿import { FastifyInstance } from 'fastify';
 import QRCode from 'qrcode';
 import { prisma } from '../../config/prisma';
 import { aiQueue } from '../../queues/queue.config';
@@ -230,7 +230,7 @@ export async function aiRoutes(app: FastifyInstance) {
       const html = `<!DOCTYPE html>
 <html>
 <head>
-  <title>JAKDATA — WhatsApp QR</title>
+  <title>JAKDATA â€” WhatsApp QR</title>
   <meta http-equiv="refresh" content="30">
   <style>
     body {
@@ -256,11 +256,11 @@ export async function aiRoutes(app: FastifyInstance) {
   </style>
 </head>
 <body>
-  <h2>🧠 JAKDATA WhatsApp AI</h2>
+  <h2>ðŸ§  JAKDATA WhatsApp AI</h2>
   <img src="${qrDataUrl}" alt="QR Code WhatsApp" />
   <p>Scan dengan WhatsApp nomor <strong>${phone}</strong></p>
-  <p>WA → ⋮ → Linked Devices → Link a Device → Scan</p>
-  <p class="warning">⚠️ Halaman auto-refresh setiap 30 detik</p>
+  <p>WA â†’ â‹® â†’ Linked Devices â†’ Link a Device â†’ Scan</p>
+  <p class="warning">âš ï¸ Halaman auto-refresh setiap 30 detik</p>
   <p>Status: <strong>${session.status}</strong></p>
 </body>
 </html>`;
@@ -492,4 +492,17 @@ async function processDesignJob(jobId: number, inputData: any) {
   } catch {
     await prisma.designJob.update({ where: { id: jobId }, data: { status: 'failed' } });
   }
+
+  app.post("/api/ai/whatsapp-reconnect", async (request, reply) => {
+    try {
+      await prisma.whatsappSession.upsert({
+        where: { sessionKey: "main" },
+        update: { status: "disconnected", qrCode: null, lastSeen: new Date() },
+        create: { sessionKey: "main", status: "disconnected" },
+      });
+      return reply.send({ success: true, message: "Session direset." });
+    } catch (err) {
+      return reply.status(500).send({ success: false, message: "Gagal reset session" });
+    }
+  });
 }
