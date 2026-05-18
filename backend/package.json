@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "jakdata-backend",
   "version": "3.0.0",
   "description": "JAKDATA Backend API",
@@ -6,7 +6,8 @@
     "seed": "npx ts-node --transpile-only prisma/seed.ts"
   },
   "scripts": {
-    "build": "tsc --noEmit --skipLibCheck",
+    "start": "node dist/main.js",
+    "build": "tsc --skipLibCheck",
     "dev": "npx ts-node --transpile-only src/main.ts",
     "dev:stop": "powershell -NoProfile -Command \"$c=Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue; if($c){$c.OwningProcess|Select-Object -Unique|ForEach-Object{Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue}}\"",
     "dev:safe": "npm run dev:stop && npm run dev",
@@ -59,3 +60,5 @@
     "typescript": "^5.6.3"
   }
 }
+
+
