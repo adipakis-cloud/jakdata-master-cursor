@@ -328,3 +328,41 @@ export async function startWhatsappAI(): Promise<void> {
 export function getWhatsappStatus(): { connected: boolean; socket: boolean } {
   return { connected: isConnected, socket: globalSocket !== null };
 }
+
+/** Reset session DB, hapus creds lokal, dan mulai ulang socket untuk QR baru. */
+export async function forceWhatsappReconnect(): Promise<void> {
+  isConnected = false;
+
+  if (globalSocket) {
+    try {
+      await globalSocket.logout();
+    } catch {
+      try {
+        globalSocket.end(undefined);
+      } catch {
+        /* ignore */
+      }
+    }
+    globalSocket = null;
+  }
+
+  const authPath = path.join(process.cwd(), "wa-auth");
+  if (fs.existsSync(authPath)) {
+    fs.rmSync(authPath, { recursive: true, force: true });
+  }
+
+  await prisma.whatsappSession.upsert({
+    where: { sessionKey: "main" },
+    update: {
+      status: "disconnected",
+      qrCode: null,
+      lastSeen: new Date(),
+    },
+    create: {
+      sessionKey: "main",
+      status: "disconnected",
+    },
+  });
+
+  await startWhatsappAI();
+}

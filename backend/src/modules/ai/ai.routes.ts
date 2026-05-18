@@ -3,7 +3,10 @@ import QRCode from 'qrcode';
 import { prisma } from '../../config/prisma';
 import { aiQueue } from '../../queues/queue.config';
 import { analyzeWarmindoEconomics } from '../../ai/modules/economic-ai/economic.service';
-import { getWhatsappStatus } from '../../ai/modules/whatsapp-ai/whatsapp.service';
+import {
+  forceWhatsappReconnect,
+  getWhatsappStatus,
+} from '../../ai/modules/whatsapp-ai/whatsapp.service';
 import { buildLaporanListWhere, buildWilayahKeyedListWhere, resolveVisibleRtIds } from '../security/security';
 
 export async function aiRoutes(app: FastifyInstance) {
@@ -48,6 +51,7 @@ export async function aiRoutes(app: FastifyInstance) {
           kelurahan: { select: { nama: true } },
         },
         orderBy: { namaOutlet: 'asc' },
+        take: 10,
       });
 
       const summaries = await Promise.all(
@@ -265,6 +269,20 @@ export async function aiRoutes(app: FastifyInstance) {
     } catch (err) {
       console.error('[WhatsApp QR] Error:', err);
       return reply.code(500).send({ success: false, message: 'Gagal generate QR' });
+    }
+  });
+
+  app.post('/whatsapp-reconnect', async (_req, reply) => {
+    try {
+      await forceWhatsappReconnect();
+      return {
+        success: true,
+        message:
+          'Session direset. Buka /api/ai/whatsapp-qr dalam 15 detik untuk QR baru.',
+      };
+    } catch (err) {
+      console.error('[WhatsApp Reconnect]', err);
+      return reply.code(500).send({ success: false, message: 'Gagal reset session' });
     }
   });
 
