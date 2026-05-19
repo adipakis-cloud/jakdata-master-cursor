@@ -9,3 +9,7 @@ wa-qr.png
 .env
 wa-auth/
 wa-qr.png
+
+.env
+.env.*
+add_scoring.js
