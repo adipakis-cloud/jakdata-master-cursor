@@ -1,0 +1,10 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN "kinerja_skor" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN "kinerja_bintang" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN "kinerja_level" VARCHAR(20) NOT NULL DEFAULT 'baru';
+ALTER TABLE "users" ADD COLUMN "last_activity_at" TIMESTAMP(3);
+ALTER TABLE "users" ADD COLUMN "total_warga_input" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN "total_laporan_input" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN "total_hari_aktif" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN "data_quality_score" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "users" ADD COLUMN "skor_updated_at" TIMESTAMP(3);

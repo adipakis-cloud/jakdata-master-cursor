@@ -8,6 +8,7 @@ import { AdminKoordinator } from './AdminKoordinator';
 import { AdminPasswordReset } from './AdminPasswordReset';
 import CommandCenter from '../CommandCenter';
 import WarmindoEconomicDashboard from '../WarmindoEconomicDashboard';
+import { AdminLeaderboard } from './AdminLeaderboard';
 
 const NAV = [
   { path: 'home', label: 'Beranda', icon: '🏠' },
@@ -20,6 +21,7 @@ const NAV = [
   { path: 'warmindo-economic', label: 'Economic Intelligence', icon: '📊' },
   { path: 'ai', label: 'AI Alerts', icon: '🤖' },
   { path: 'koordinator', label: 'Governance', icon: '🏛️' },
+  { path: 'leaderboard', label: 'Kinerja Koordinator', icon: '📊' },
   { path: 'password-reset', label: 'Reset Password', icon: '🔐' },
 ];
 
@@ -125,6 +127,7 @@ export function AdminApp() {
             <Route path="dashboard" element={<AdminDashboard />} />
             <Route path="wilayah" element={<AdminWilayah />} />
             <Route path="koordinator" element={<AdminKoordinator />} />
+            <Route path="leaderboard" element={<AdminLeaderboard />} />
             <Route path="warga" element={<AdminWarga />} />
             <Route path="laporan" element={<AdminLaporan />} />
             <Route path="bantuan" element={<AdminBantuan />} />

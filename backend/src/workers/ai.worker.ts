@@ -7,11 +7,15 @@ import {
 } from "../ai/modules/economic-ai/economic.service";
 
 export function startAiWorker() {
+  if (!redisConnection) {
+    console.warn("[AI Worker] Redis tidak tersedia � worker dinonaktifkan");
+    return null;
+  }
+
   const worker = new Worker(
     "ai-processing",
     async (job) => {
       console.log(`[AI Worker] Job: ${job.name}`, job.data);
-
       switch (job.name) {
         case "fraud-check-laporan":
           await checkLaporanFraud(job.data.laporanId);
@@ -23,16 +27,10 @@ export function startAiWorker() {
           await analyzeAllActiveWarmindo();
           break;
         case "territorial-health-rt":
-          console.warn(
-            `[AI Worker] territorial-health-rt belum diimplementasi`,
-            job.data
-          );
+          console.warn(`[AI Worker] territorial-health-rt belum diimplementasi`, job.data);
           break;
         case "fraud-check-wilayah":
-          console.warn(
-            `[AI Worker] fraud-check-wilayah belum diimplementasi`,
-            job.data
-          );
+          console.warn(`[AI Worker] fraud-check-wilayah belum diimplementasi`, job.data);
           break;
         default:
           console.warn(`[AI Worker] Job tidak dikenal: ${job.name}`);
@@ -45,13 +43,11 @@ export function startAiWorker() {
   );
 
   worker.on("completed", (job) => {
-    console.log(`[AI Worker] ✓ Selesai: ${job.name} (${job.id})`);
+    console.log(`[AI Worker] Selesai: ${job.name} (${job.id})`);
   });
-
   worker.on("failed", (job, err) => {
-    console.error(`[AI Worker] ✗ Gagal: ${job?.name}`, err.message);
+    console.error(`[AI Worker] Gagal: ${job?.name}`, err.message);
   });
-
-  console.log("[AI Worker] ✓ Berjalan dan menunggu job...");
+  console.log("[AI Worker] Berjalan dan menunggu job...");
   return worker;
 }

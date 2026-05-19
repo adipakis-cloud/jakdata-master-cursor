@@ -7,7 +7,7 @@ export function startScheduler() {
     console.log(
       "[Scheduler] ⏰ Memulai analisa ekonomi harian semua warmindo..."
     );
-    await aiQueue.add("economic-analysis-all", {}, { priority: 1 });
+    await aiQueue?.add("economic-analysis-all", {}, { priority: 1 });
   });
 
   cron.schedule("0 3 * * *", async () => {
@@ -18,7 +18,7 @@ export function startScheduler() {
     });
 
     for (const rt of allRt) {
-      await aiQueue.add(
+      await aiQueue?.add(
         "territorial-health-rt",
         { rtId: rt.id },
         { priority: 1, delay: 5000 }
@@ -53,7 +53,7 @@ export function startScheduler() {
 
     for (const rt of activeRt) {
       if (rt.rtId) {
-        await aiQueue.add(
+        await aiQueue?.add(
           "fraud-check-wilayah",
           { rtId: rt.rtId },
           { priority: 7 }
@@ -64,3 +64,4 @@ export function startScheduler() {
 
   console.log("[Scheduler] ✓ Scheduler aktif — 3 cron job berjalan");
 }
+

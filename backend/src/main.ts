@@ -154,7 +154,7 @@ async function bootstrap() {
     console.log(`\n✅ JAKDATA API v3.0 — Port ${port}\n`);
 
     if (process.env.ENABLE_AI_WORKERS !== 'false') {
-      startAiWorker();
+      try { startAiWorker(); } catch (e) { console.warn("[AI Worker] Dinonaktifkan:", (e as any).message); }
       startScheduler();
       startEmailAI();
       startWhatsappAI().catch((err) => console.error('[WhatsApp AI] Gagal start:', err));
@@ -177,6 +177,7 @@ bootstrap().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
 
 
 

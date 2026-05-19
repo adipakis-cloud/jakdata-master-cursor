@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { scoringRoutes } from './scoring.routes';
 import {
   buildLaporanListWhere,
   buildWargaListWhere,
@@ -16,6 +17,8 @@ async function requireKoordinatorMobile(req: any, reply: any) {
 }
 
 export async function koordinatorRoutes(app: FastifyInstance) {
+  await app.register(scoringRoutes, { prefix: '/scoring' });
+
   /**
    * Single mobile home: scope + allowed menus + key counts + recent laporan.
    * Replaces legacy wilayah_assignments SQL (table may not exist).

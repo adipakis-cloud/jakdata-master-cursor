@@ -186,3 +186,4 @@ export async function laporanRoutes(app: FastifyInstance) {
     }
   });
 }
+
