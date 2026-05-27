@@ -8,6 +8,14 @@ import {
   validateNewPassword,
 } from '../../lib/passwordPolicy';
 import { checkLoginRateLimit, recordFailedLogin, clearLoginAttempts, writeAuditLog } from '../security/security';
+import {
+  findActivationCode,
+  incrementActivationCodeUsage,
+  levelLabel,
+  normalizeNoHp,
+  roleFromActivationLevel,
+  validateActivationCodeRow,
+} from '../../lib/activationCode';
 
 function jwtUserId(req: { user?: { sub?: number; userId?: number } }): number {
   const u = req.user ?? {};
@@ -196,5 +204,201 @@ export async function authRoutes(app: FastifyInstance) {
     });
 
     return { success: true, message: 'Password berhasil diubah' };
+  });
+
+  app.get('/check-code/:code', async (req, reply) => {
+    const { code } = req.params as { code: string };
+    const row = await findActivationCode(code);
+    if (!row) {
+      return { valid: false, reason: 'Kode tidak ditemukan' };
+    }
+    const check = validateActivationCodeRow(row);
+    if (!check.ok) {
+      return { valid: false, reason: check.ok === false ? check.reason : 'Kode tidak valid' };
+    }
+
+    let kecamatan = '—';
+    let kecamatanId: number | null = row.kecamatan_id;
+    if (row.kecamatan_id) {
+      const kec = await prisma.kecamatan.findUnique({
+        where: { id: row.kecamatan_id },
+        select: { id: true, nama: true },
+      });
+      if (kec) {
+        kecamatan = kec.nama;
+        kecamatanId = kec.id;
+      }
+    }
+
+    return {
+      valid: true,
+      level: row.level,
+      levelLabel: levelLabel(row.level),
+      kecamatan,
+      kecamatanId,
+    };
+  });
+
+  app.post('/register', async (req, reply) => {
+    const body = (req.body ?? {}) as {
+      nama?: string;
+      noHp?: string;
+      password?: string;
+      confirmPassword?: string;
+      activationCode?: string;
+      kecamatanId?: number;
+      kelurahanId?: number;
+      rwId?: number;
+      rtId?: number;
+    };
+
+    const nama = String(body.nama ?? '').trim();
+    const activationCode = String(body.activationCode ?? '').trim();
+
+    if (!nama || !body.noHp || !body.password || !body.confirmPassword || !activationCode) {
+      return reply.code(400).send({ error: 'Semua field wajib diisi' });
+    }
+
+    const code = await findActivationCode(activationCode);
+    if (!code) {
+      return reply.code(400).send({ error: 'Kode aktivasi tidak valid atau sudah tidak aktif' });
+    }
+    const codeCheck = validateActivationCodeRow(code);
+    if (!codeCheck.ok) {
+      const msg = codeCheck.ok === false ? codeCheck.reason : 'Kode tidak valid';
+      return reply.code(400).send({ error: msg });
+    }
+
+    const hp = normalizeNoHp(body.noHp);
+    if (!hp.ok) {
+      const msg = hp.ok === false ? hp.error : 'Nomor HP tidak valid';
+      return reply.code(400).send({ error: msg });
+    }
+
+    if (body.password.length < 8) {
+      return reply.code(400).send({ error: 'Password minimal 8 karakter' });
+    }
+    if (body.password !== body.confirmPassword) {
+      return reply.code(400).send({ error: 'Konfirmasi password tidak cocok' });
+    }
+
+    const role = roleFromActivationLevel(code.level);
+    if (!role) return reply.code(400).send({ error: 'Level kode tidak valid' });
+
+    const kecamatanId = Number(body.kecamatanId);
+    if (!kecamatanId || Number.isNaN(kecamatanId)) {
+      return reply.code(400).send({ error: 'kecamatanId wajib' });
+    }
+
+    if (code.kecamatan_id && code.kecamatan_id !== kecamatanId) {
+      return reply.code(400).send({ error: 'Kecamatan tidak sesuai dengan kode aktivasi' });
+    }
+
+    const kelurahanId = body.kelurahanId ? Number(body.kelurahanId) : null;
+    const rwId = body.rwId ? Number(body.rwId) : null;
+    const rtId = body.rtId ? Number(body.rtId) : null;
+
+    if (code.level === 'kelurahan' && !kelurahanId) {
+      return reply.code(400).send({ error: 'kelurahanId wajib untuk level ini' });
+    }
+    if (code.level === 'rw' && (!kelurahanId || !rwId)) {
+      return reply.code(400).send({ error: 'kelurahanId dan rwId wajib untuk level ini' });
+    }
+    if (code.level === 'rt' && (!kelurahanId || !rwId || !rtId)) {
+      return reply.code(400).send({ error: 'kelurahanId, rwId, dan rtId wajib untuk level ini' });
+    }
+
+    if (kelurahanId) {
+      const kel = await prisma.kelurahan.findFirst({
+        where: { id: kelurahanId, kecamatanId },
+      });
+      if (!kel) return reply.code(400).send({ error: 'Kelurahan tidak valid untuk kecamatan ini' });
+    }
+    if (rwId) {
+      const rw = await prisma.rW.findFirst({
+        where: { id: rwId, ...(kelurahanId ? { kelurahanId } : {}) },
+      });
+      if (!rw) return reply.code(400).send({ error: 'RW tidak valid' });
+    }
+    if (rtId) {
+      const rt = await prisma.rT.findFirst({
+        where: { id: rtId, ...(rwId ? { rwId } : {}) },
+      });
+      if (!rt) return reply.code(400).send({ error: 'RT tidak valid' });
+    }
+
+    const email = `${hp.value}@jakdata.id`;
+    const existing = await prisma.user.findFirst({
+      where: { OR: [{ noHp: hp.value }, { email }] },
+    });
+    if (existing) {
+      return reply.code(409).send({ error: 'Nomor HP sudah terdaftar' });
+    }
+
+    const passwordHash = await hashPassword(body.password);
+    const user = await prisma.user.create({
+      data: {
+        nama,
+        email,
+        noHp: hp.value,
+        passwordHash,
+        role: role as any,
+        kecamatanId,
+        kelurahanId: kelurahanId ?? undefined,
+        rwId: rwId ?? undefined,
+        rtId: rtId ?? undefined,
+        aktif: true,
+        lastLoginAt: new Date(),
+      },
+    });
+
+    await incrementActivationCodeUsage(activationCode);
+
+    const { wilayahId, wilayahType } = computeWilayahMeta(user);
+    const redirectTo = loginRedirectTo(user.role);
+    const token = app.jwt.sign(
+      {
+        sub: user.id,
+        userId: user.id,
+        email: user.email,
+        role: user.role,
+        nama: user.nama,
+        wilayahId,
+        wilayahType,
+        kotaId: user.kotaId,
+        kecamatanId: user.kecamatanId,
+        kelurahanId: user.kelurahanId,
+        rwId: user.rwId,
+        rtId: user.rtId,
+        warmindoId: user.warmindoId,
+      },
+      { expiresIn: '7d' },
+    );
+
+    await writeAuditLog({
+      userId: user.id,
+      action: 'auth.register',
+      ipAddress: req.ip ?? 'unknown',
+      newValues: { email, role, kecamatanId },
+    });
+
+    return {
+      success: true,
+      token,
+      redirectTo,
+      user: {
+        id: user.id,
+        nama: user.nama,
+        email: user.email,
+        role: user.role,
+        noHp: user.noHp,
+        wilayahId,
+        wilayahType,
+        kecamatanId: user.kecamatanId,
+        kelurahanId: user.kelurahanId,
+        rwId: user.rwId,
+        rtId: user.rtId,
+      },
+    };
   });
 }

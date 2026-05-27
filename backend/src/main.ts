@@ -8,6 +8,8 @@ import path from 'path';
 import fs from 'fs';
 
 import { authRoutes } from './modules/auth/auth.routes';
+import { activationRoutes } from './modules/auth/activation.routes';
+import { setupActivationCodes } from './lib/setupActivationCodes';
 import { dashboardRoutes } from './modules/dashboard/dashboard.routes';
 import { wilayahRoutes } from './modules/wilayah/wilayah.routes';
 import { wargaRoutes } from './modules/warga/warga.routes';
@@ -121,6 +123,7 @@ async function bootstrap() {
   });
 
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(activationRoutes, { prefix: '/api/admin/activation-codes' });
   await app.register(dashboardRoutes, { prefix: '/api/dashboard' });
   await app.register(wilayahRoutes, { prefix: '/api/wilayah' });
   await app.register(wargaRoutes, { prefix: '/api/warga' });
@@ -152,6 +155,10 @@ async function bootstrap() {
   try {
     await app.listen({ port, host: '0.0.0.0' });
     console.log(`\n✅ JAKDATA API v3.0 — Port ${port}\n`);
+
+    setupActivationCodes().catch((err) =>
+      console.warn('[Setup] Activation codes:', (err as Error).message),
+    );
 
     if (process.env.ENABLE_AI_WORKERS !== 'false') {
       try { startAiWorker(); } catch (e) { console.warn("[AI Worker] Dinonaktifkan:", (e as any).message); }

@@ -14,6 +14,7 @@ import {
   isRoleAllowedInMode,
 } from './lib/appMode';
 import { LoginPage } from './pages/LoginPage';
+import { RegisterPage } from './pages/RegisterPage';
 import { AdminApp } from './pages/admin/AdminApp';
 import { FieldApp } from './pages/field/FieldApp';
 import { WarmindoApp } from './pages/warmindo/WarmindoApp';
@@ -88,6 +89,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/daftar" element={<RegisterPage />} />
         <Route path="/wrong-app" element={<WrongApp />} />
         {APP_MODE === 'command' ? CommandRoutes() : FieldRoutes()}
         <Route

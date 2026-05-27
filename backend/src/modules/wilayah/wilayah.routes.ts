@@ -8,6 +8,46 @@ function authScope(app: FastifyInstance) {
 }
 
 export async function wilayahRoutes(app: FastifyInstance) {
+  app.get('/register/kecamatan/:id', async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const row = await prisma.kecamatan.findUnique({
+      where: { id: +id },
+      select: { id: true, nama: true },
+    });
+    if (!row) return reply.code(404).send({ error: 'Kecamatan tidak ditemukan' });
+    return row;
+  });
+
+  app.get('/register/kelurahan', async (req, reply) => {
+    const { kecamatanId } = req.query as { kecamatanId?: string };
+    if (!kecamatanId) return reply.code(400).send({ error: 'kecamatanId wajib' });
+    return prisma.kelurahan.findMany({
+      where: { kecamatanId: +kecamatanId },
+      select: { id: true, nama: true },
+      orderBy: { nama: 'asc' },
+    });
+  });
+
+  app.get('/register/rw', async (req, reply) => {
+    const { kelurahanId } = req.query as { kelurahanId?: string };
+    if (!kelurahanId) return reply.code(400).send({ error: 'kelurahanId wajib' });
+    return prisma.rW.findMany({
+      where: { kelurahanId: +kelurahanId },
+      select: { id: true, nomor: true },
+      orderBy: { nomor: 'asc' },
+    });
+  });
+
+  app.get('/register/rt', async (req, reply) => {
+    const { rwId } = req.query as { rwId?: string };
+    if (!rwId) return reply.code(400).send({ error: 'rwId wajib' });
+    return prisma.rT.findMany({
+      where: { rwId: +rwId },
+      select: { id: true, nomor: true },
+      orderBy: { nomor: 'asc' },
+    });
+  });
+
   app.get('/kota', { preHandler: authScope(app) }, async (req) => {
     const user = req.user as any;
     const rtIds = await resolveVisibleRtIds(user);

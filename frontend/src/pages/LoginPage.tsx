@@ -1,5 +1,5 @@
 import { useState, FormEvent, useMemo } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { AuthStorage } from '../lib/auth';
 import { APP_MODE, COMMAND_ROLES, defaultPathForMode, isRoleAllowedInMode } from '../lib/appMode';
@@ -164,6 +164,13 @@ export function LoginPage() {
               </div>
             </div>
           ) : null}
+
+          <p className="mt-5 text-center text-sm text-gray-500">
+            Belum punya akun?{' '}
+            <Link to="/daftar" className="font-medium text-blue-600 hover:underline">
+              Daftar koordinator di sini
+            </Link>
+          </p>
         </div>
       </div>
     </div>

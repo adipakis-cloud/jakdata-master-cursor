@@ -1634,3 +1634,19 @@ model EmailMessage {
   @@map("email_messages")
 }
 
+model ActivationCode {
+  id          Int       @id @default(autoincrement())
+  kode        String    @unique @db.VarChar(50)
+  level       String    @db.VarChar(20)
+  wilayahId   Int?      @map("wilayah_id")
+  kecamatanId Int?      @map("kecamatan_id")
+  maxUsage    Int       @default(999) @map("max_usage")
+  usedCount   Int       @default(0) @map("used_count")
+  aktif       Boolean   @default(true)
+  expiredAt   DateTime? @map("expired_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  createdBy   Int?      @map("created_by")
+
+  @@map("activation_codes")
+}
+
