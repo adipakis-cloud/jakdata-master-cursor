@@ -4,7 +4,7 @@ import { AuthStorage } from './auth';
 
 function resolveApiBaseURL(): string {
   const raw = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-  if (!raw) return '/api';
+  if (!raw) return 'https://jakdata-backend.onrender.com/api';
   const base = raw.replace(/\/$/, '');
   return base.endsWith('/api') ? base : `${base}/api`;
 }
@@ -30,3 +30,4 @@ api.interceptors.response.use(
     return Promise.reject(err);
   },
 );
+
