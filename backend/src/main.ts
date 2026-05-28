@@ -164,7 +164,7 @@ async function bootstrap() {
       try { startAiWorker(); } catch (e) { console.warn("[AI Worker] Dinonaktifkan:", (e as any).message); }
       startScheduler();
       startEmailAI();
-      startWhatsappAI().catch((err) => console.error('[WhatsApp AI] Gagal start:', err));
+      if (process.env.ENABLE_WHATSAPP !== 'false') { startWhatsappAI().catch((err) => console.error('[WhatsApp AI] Gagal start:', err)); } else { console.log('[WhatsApp AI] Dinonaktifkan via env'); }
     }
   } catch (err: any) {
     if (err?.code === 'EADDRINUSE') {
@@ -184,6 +184,7 @@ bootstrap().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
 
 
 
