@@ -1,3 +1,4 @@
+// Redis optional - WA service compatible
 import IORedis from "ioredis";
 import { Queue } from "bullmq";
 
@@ -34,3 +35,4 @@ if (REDIS_ENABLED) {
 } else {
   console.log("Redis not configured — queue disabled. API runs normally.");
 }
+
