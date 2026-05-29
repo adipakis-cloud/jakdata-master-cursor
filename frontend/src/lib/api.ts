@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+// Render production URL configured
 import axios from 'axios';
 import { AuthStorage } from './auth';
 
@@ -30,4 +31,5 @@ api.interceptors.response.use(
     return Promise.reject(err);
   },
 );
+
 
