@@ -4,7 +4,7 @@ const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
-export const AI_MODEL = "claude-haiku-4-5-20251001";
+export const AI_MODEL = "claude-3-5-haiku-latest";
 
 export interface AiCallResult {
   text: string;
