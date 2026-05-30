@@ -144,6 +144,15 @@ async function bootstrap() {
     version: 'jakdata-field-trial-v0.1',
   }));
 
+
+  // Serve WhatsApp QR code
+  app.get('/wa-qr', async (_req, reply) => {
+    const qrPath = require('path').join(process.cwd(), 'wa-qr.png');
+    if (require('fs').existsSync(qrPath)) {
+      return reply.type('image/png').send(require('fs').readFileSync(qrPath));
+    }
+    return reply.code(404).send({ error: 'QR not ready yet' });
+  });
   app.get('/health', async () => ({
     status: 'ok',
     version: '3.0',
@@ -184,6 +193,7 @@ bootstrap().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+
 
 
 
