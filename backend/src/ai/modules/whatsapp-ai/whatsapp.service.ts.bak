@@ -315,17 +315,6 @@ export async function startWhatsappAI(): Promise<void> {
       } catch (err) {
         console.error(`[WhatsApp AI] Error memproses pesan dari ${from}:`, err);
 
-        const errorMessage =
-          err instanceof Error ? err.message : typeof err === "string" ? err : JSON.stringify(err);
-
-        await prisma.whatsappMessage.update({
-          where: { id: saved.id },
-          data: {
-            aiProcessed: false,
-            aiReply: `[ERROR] ${errorMessage}`.substring(0, 1000),
-          },
-        }).catch((dbErr) => console.error("[WhatsApp AI] Gagal simpan error:", dbErr));
-
         await sock.sendMessage(from, {
           text: "Maaf, sistem sedang mengalami gangguan. Silakan coba beberapa saat lagi atau hubungi petugas kelurahan langsung.",
         });
@@ -377,4 +366,3 @@ export async function forceWhatsappReconnect(): Promise<void> {
 
   await startWhatsappAI();
 }
-
