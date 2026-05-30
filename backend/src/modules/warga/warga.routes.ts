@@ -1,4 +1,7 @@
 import { FastifyInstance } from 'fastify';
+import fs from 'fs';
+import path from 'path';
+import { pipeline } from 'stream/promises';
 import { prisma } from '../../config/prisma';
 import { getPagination } from '../../lib/pagination';
 import { sanitizeObject } from '../../lib/sanitize';
@@ -148,6 +151,35 @@ export async function wargaRoutes(app: FastifyInstance) {
     }
 
     return reply.code(201).send(warga);
+  });
+
+  app.post('/:id/foto-ktp', { preHandler: authScope(app) }, async (req: any, reply: any) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return reply.code(400).send({ error: 'ID tidak valid' });
+
+    const row = await findWargaInScope(req.user, id);
+    if (!row) return reply.code(404).send({ error: 'Warga tidak ditemukan' });
+
+    const data = await req.file();
+    if (!data) return reply.code(400).send({ error: 'File foto KTP wajib' });
+
+    const mime = data.mimetype ?? '';
+    if (!mime.startsWith('image/')) {
+      return reply.code(400).send({ error: 'Hanya file gambar yang diizinkan' });
+    }
+
+    const ext = path.extname(data.filename || '') || '.jpg';
+    const fname = `ktp-${id}-${Date.now()}${ext}`;
+    const uploadDir = path.join(process.cwd(), 'uploads', 'ktp');
+    fs.mkdirSync(uploadDir, { recursive: true });
+    const dest = path.join(uploadDir, fname);
+    await pipeline(data.file, fs.createWriteStream(dest));
+
+    const fotoUrl = `/uploads/ktp/${fname}`;
+    await prisma.warga.update({ where: { id }, data: { fotoUrl } });
+
+    console.log(`[JAKDATA] Foto KTP warga #${id} disimpan: ${fotoUrl}`);
+    return { success: true, fotoUrl };
   });
 
   app.get('/:id', { preHandler: authScope(app) }, async (req: any, reply: any) => {

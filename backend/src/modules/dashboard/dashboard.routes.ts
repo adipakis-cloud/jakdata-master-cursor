@@ -4,7 +4,7 @@ import { prisma } from '../../config/prisma';
 import { territoryScopeMiddleware } from '../../middleware/territoryScope.middleware';
 import { buildLaporanListWhere, buildWilayahKeyedListWhere, resolveVisibleRtIds } from '../security/security';
 
-const DAPIL3_KOTA_KODES = ['3172', '3173', '3101'] as const;
+import { DAPIL3_KOTA_KODES, dapil3KelurahanWhere, dapil3KecamatanWhere, KOORDINATOR_FIELD_ROLES } from '../../lib/dapil3';
 
 function authScope(app: FastifyInstance) {
   return [app.authenticate, territoryScopeMiddleware];
@@ -76,6 +76,215 @@ export async function dashboardRoutes(app: FastifyInstance) {
     ]);
 
     return { totalWarga, totalLaporan, totalBantuan, laporanPending, laporanSelesai };
+  });
+
+  /** Dapil 3 — kecamatan/kelurahan aktif vs belum ada koordinator. */
+  app.get('/wilayah-status', { preHandler: authScope(app) }, async () => {
+    const koordRoles = [...KOORDINATOR_FIELD_ROLES];
+
+    const kecamatanList = await prisma.kecamatan.findMany({
+      where: dapil3KecamatanWhere(),
+      include: {
+        kota: { select: { nama: true } },
+        kelurahan: {
+          select: { id: true, nama: true },
+          orderBy: { nama: 'asc' },
+        },
+      },
+      orderBy: [{ kota: { nama: 'asc' } }, { nama: 'asc' }],
+    });
+
+    async function koordCountForKecamatan(kecId: number) {
+      return prisma.user.count({
+        where: {
+          aktif: true,
+          role: { in: koordRoles },
+          OR: [
+            { kecamatanId: kecId },
+            { kelurahan: { kecamatanId: kecId } },
+            { rw: { kelurahan: { kecamatanId: kecId } } },
+            { rt: { rw: { kelurahan: { kecamatanId: kecId } } } },
+          ],
+        },
+      });
+    }
+
+    async function laporanCountForKecamatan(kecId: number) {
+      return prisma.laporanWarga.count({
+        where: {
+          OR: [
+            { kecamatanId: kecId },
+            { kelurahan: { kecamatanId: kecId } },
+            { rt: { rw: { kelurahan: { kecamatanId: kecId } } } },
+          ],
+        },
+      });
+    }
+
+    async function wargaCountForKecamatan(kecId: number) {
+      return prisma.warga.count({
+        where: { deletedAt: null, rt: { rw: { kelurahan: { kecamatanId: kecId } } } },
+      });
+    }
+
+    async function koordCountForKelurahan(kelId: number) {
+      return prisma.user.count({
+        where: {
+          aktif: true,
+          role: { in: koordRoles },
+          OR: [
+            { kelurahanId: kelId },
+            { rw: { kelurahanId: kelId } },
+            { rt: { rw: { kelurahanId: kelId } } },
+          ],
+        },
+      });
+    }
+
+    async function laporanCountForKelurahan(kelId: number) {
+      return prisma.laporanWarga.count({
+        where: {
+          OR: [{ kelurahanId: kelId }, { rt: { rw: { kelurahanId: kelId } } }],
+        },
+      });
+    }
+
+    async function wargaCountForKelurahan(kelId: number) {
+      return prisma.warga.count({
+        where: { deletedAt: null, rt: { rw: { kelurahanId: kelId } } },
+      });
+    }
+
+    const kecamatan = await Promise.all(
+      kecamatanList.map(async (kec) => {
+        const [koordinatorCount, laporanCount, wargaCount] = await Promise.all([
+          koordCountForKecamatan(kec.id),
+          laporanCountForKecamatan(kec.id),
+          wargaCountForKecamatan(kec.id),
+        ]);
+        const status =
+          koordinatorCount > 0 || laporanCount > 0 || wargaCount > 0 ? 'aktif' : 'belum_aktif';
+
+        const kelurahan = await Promise.all(
+          kec.kelurahan.map(async (kel) => {
+            const [kKoord, kLap, kWarga] = await Promise.all([
+              koordCountForKelurahan(kel.id),
+              laporanCountForKelurahan(kel.id),
+              wargaCountForKelurahan(kel.id),
+            ]);
+            return {
+              id: kel.id,
+              nama: kel.nama,
+              status: kKoord > 0 || kLap > 0 || kWarga > 0 ? 'aktif' : 'belum_aktif',
+              koordinatorCount: kKoord,
+              laporanCount: kLap,
+              wargaCount: kWarga,
+            };
+          }),
+        );
+
+        return {
+          id: kec.id,
+          nama: kec.nama,
+          kotaNama: kec.kota.nama,
+          status,
+          koordinatorCount,
+          laporanCount,
+          wargaCount,
+          kelurahan,
+        };
+      }),
+    );
+
+    const totalKelurahan = kecamatan.reduce((s, k) => s + k.kelurahan.length, 0);
+    const kelurahanAktif = kecamatan.reduce(
+      (s, k) => s + k.kelurahan.filter((x) => x.status === 'aktif').length,
+      0,
+    );
+    const kecamatanAktif = kecamatan.filter((k) => k.status === 'aktif').length;
+
+    const dapilRtIds = (
+      await prisma.rT.findMany({
+        where: { rw: { kelurahan: dapil3KelurahanWhere() } },
+        select: { id: true },
+      })
+    ).map((r) => r.id);
+
+    const [totalKoordinator, totalLaporan, totalWarga, laporanHariIni, recentLaporan] = await Promise.all([
+      prisma.user.count({
+        where: {
+          aktif: true,
+          role: { in: koordRoles },
+          OR: [
+            { kecamatan: dapil3KecamatanWhere() },
+            { kelurahan: dapil3KelurahanWhere() },
+            { rw: { kelurahan: dapil3KelurahanWhere() } },
+            { rt: { rw: { kelurahan: dapil3KelurahanWhere() } } },
+          ],
+        },
+      }),
+      prisma.laporanWarga.count({
+        where: {
+          OR: [
+            { rtId: { in: dapilRtIds } },
+            { kelurahan: dapil3KelurahanWhere() },
+            { kecamatan: dapil3KecamatanWhere() },
+          ],
+        },
+      }),
+      prisma.warga.count({
+        where: { deletedAt: null, rt: { rw: { kelurahan: dapil3KelurahanWhere() } } },
+      }),
+      (() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        return prisma.laporanWarga.count({
+          where: {
+            createdAt: { gte: today },
+            OR: [
+              { rtId: { in: dapilRtIds } },
+              { kelurahan: dapil3KelurahanWhere() },
+              { kecamatan: dapil3KecamatanWhere() },
+            ],
+          },
+        });
+      })(),
+      prisma.laporanWarga.findMany({
+        where: {
+          OR: [
+            { rtId: { in: dapilRtIds } },
+            { kelurahan: dapil3KelurahanWhere() },
+            { kecamatan: dapil3KecamatanWhere() },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: {
+          id: true,
+          kodeLaporan: true,
+          kategori: true,
+          status: true,
+          urgencyLevel: true,
+          createdAt: true,
+          namaPelapor: true,
+        },
+      }),
+    ]);
+
+    return {
+      summary: {
+        totalKecamatan: kecamatan.length,
+        kecamatanAktif,
+        totalKelurahan,
+        kelurahanAktif,
+        totalKoordinator,
+        totalLaporan,
+        laporanHariIni,
+        totalWarga,
+      },
+      recentLaporan,
+      kecamatan,
+    };
   });
 
   app.get('/summary', { preHandler: authScope(app) }, async (req) => {

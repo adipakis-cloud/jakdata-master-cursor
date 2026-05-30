@@ -215,6 +215,7 @@ export function RegisterPage() {
                 <input
                   className="input"
                   placeholder="Contoh: KLD-RT-2026"
+                  maxLength={30}
                   value={activationCode}
                   onChange={(e) => setActivationCode(e.target.value.toUpperCase())}
                   onBlur={() => validateCode(activationCode)}
@@ -328,7 +329,7 @@ export function RegisterPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="label">Nama Lengkap</label>
-                <input className="input" required value={nama} onChange={(e) => setNama(e.target.value)} />
+                <input className="input" required maxLength={100} value={nama} onChange={(e) => setNama(e.target.value)} />
               </div>
               <div>
                 <label className="label">Nomor HP / WA</label>
@@ -336,6 +337,7 @@ export function RegisterPage() {
                   className="input"
                   type="tel"
                   required
+                  maxLength={15}
                   placeholder="08xxxxxxxxxx"
                   value={noHp}
                   onChange={(e) => setNoHp(e.target.value)}
@@ -349,6 +351,7 @@ export function RegisterPage() {
                   type="password"
                   required
                   minLength={8}
+                  maxLength={128}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -364,6 +367,7 @@ export function RegisterPage() {
                   className="input"
                   type="password"
                   required
+                  maxLength={128}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                 />

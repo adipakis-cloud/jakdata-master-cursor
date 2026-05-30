@@ -212,12 +212,27 @@ export async function formatLaporanStatusReply(
 
 async function resolveTerritoryIds(
   ctx: WaSenderContext,
-  lokasiText: string | null
+  _lokasiText: string | null
 ): Promise<{ rtId: number | null; kelurahanId: number | null; kecamatanId: number | null }> {
-  if (ctx.rtId != null) {
+  if (ctx.rtId != null || ctx.kecamatanId != null) {
     return { rtId: ctx.rtId, kelurahanId: ctx.kelurahanId, kecamatanId: ctx.kecamatanId };
   }
-  return { rtId: null, kelurahanId: null, kecamatanId: null };
+
+  const fallbackKecamatan = await prisma.kecamatan.findFirst({
+    where: { kota: { kode: { in: ['3172', '3173', '3101'] } } },
+    orderBy: { nama: 'asc' },
+  });
+
+  console.warn(
+    `[JAKDATA][WA Laporan] Pengirim ${ctx.phone} tidak terdaftar — laporan masuk tanpa wilayah spesifik` +
+      (fallbackKecamatan ? ` (fallback: ${fallbackKecamatan.nama})` : ''),
+  );
+
+  return {
+    rtId: null,
+    kelurahanId: null,
+    kecamatanId: fallbackKecamatan?.id ?? null,
+  };
 }
 
 export async function createLaporanFromWhatsApp(params: {
@@ -263,10 +278,10 @@ export async function createLaporanFromWhatsApp(params: {
     },
   });
 
-  if (process.env.ENABLE_AI_WORKERS !== "false") {
+  if (process.env.ENABLE_AI_WORKERS !== 'false' && aiQueue) {
     aiQueue
-      .add("fraud-check-laporan", { laporanId: laporan.id }, { priority: 8, delay: 3000 })
-      .catch((err) => console.error("[WA Laporan] fraud-check enqueue:", err));
+      .add('fraud-check-laporan', { laporanId: laporan.id }, { priority: 8, delay: 3000 })
+      .catch((err) => console.error('[JAKDATA][WA Laporan] fraud-check enqueue:', err));
   }
 
   return laporan;
@@ -464,4 +479,5 @@ export async function createEmergencyAlert(params: {
     },
   });
 }
+
 

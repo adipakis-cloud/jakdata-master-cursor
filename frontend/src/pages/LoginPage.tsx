@@ -108,6 +108,7 @@ export function LoginPage() {
                 className="input"
                 type="email"
                 placeholder="email@jakdata.id"
+                maxLength={200}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -120,6 +121,7 @@ export function LoginPage() {
                 className="input"
                 type="password"
                 placeholder="••••••••"
+                maxLength={128}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required

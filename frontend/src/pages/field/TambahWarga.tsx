@@ -83,6 +83,9 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
   const [alamat, setAlamat] = useState('');
   const [pekerjaan, setPekerjaan] = useState('');
   const [statusEkonomi, setStatusEkonomi] = useState('');
+  const [email, setEmail] = useState('');
+  const [medsos, setMedsos] = useState('');
+  const [fotoKtp, setFotoKtp] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [modal, setModal] = useState<ModalKind>(null);
@@ -184,7 +187,11 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
         if (warnings.length > 0) setPendingWarnings(warnings);
       }
 
-      await api.post('/warga', {
+      const meta: string[] = [];
+      if (email.trim()) meta.push(`Email: ${email.trim()}`);
+      if (medsos.trim()) meta.push(`Medsos: ${medsos.trim()}`);
+
+      const { data: created } = await api.post('/warga', {
         nama: nama.trim(),
         nik: nik.replace(/\s/g, ''),
         noHp: noHp.trim() || undefined,
@@ -195,7 +202,17 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
         pekerjaan: pekerjaan || undefined,
         statusEkonomi: statusEkonomi || undefined,
         kategori: 'warga_biasa',
+        catatan: meta.length ? meta.join(' | ') : undefined,
       });
+
+      const wargaId = created?.warga?.id ?? created?.id;
+      if (fotoKtp && wargaId) {
+        const fd = new FormData();
+        fd.append('file', fotoKtp);
+        await api.post(`/warga/${wargaId}/foto-ktp`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+      }
       setSaved(true);
     } catch (e: unknown) {
       const err = e as { response?: { status?: number; data?: { reason?: string; error?: string } } };
@@ -222,6 +239,9 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
     setAlamat(defaultAlamat);
     setPekerjaan('');
     setStatusEkonomi('');
+    setEmail('');
+    setMedsos('');
+    setFotoKtp(null);
     setNikIssues([]);
     setNikInfo(null);
     setNikValid(false);
@@ -293,10 +313,43 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
               <input
                 className="input min-h-[44px]"
                 autoFocus
+                maxLength={100}
                 value={nama}
                 onChange={(e) => setNama(e.target.value)}
                 placeholder="Nama sesuai KTP"
               />
+            </div>
+            <div>
+              <label className="label">Email (opsional)</label>
+              <input
+                className="input min-h-[44px]"
+                type="email"
+                maxLength={120}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="email@contoh.com"
+              />
+            </div>
+            <div>
+              <label className="label">Medsos (opsional)</label>
+              <input
+                className="input min-h-[44px]"
+                maxLength={80}
+                value={medsos}
+                onChange={(e) => setMedsos(e.target.value)}
+                placeholder="@instagram / Facebook"
+              />
+            </div>
+            <div>
+              <label className="label">Foto KTP (opsional)</label>
+              <input
+                className="input min-h-[44px]"
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={(e) => setFotoKtp(e.target.files?.[0] ?? null)}
+              />
+              <p className="mt-1 text-xs text-gray-500">Di HP akan langsung membuka kamera</p>
             </div>
             <div>
               <label className="label">No. HP / WA</label>
@@ -304,6 +357,7 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
                 className="input min-h-[44px]"
                 type="tel"
                 inputMode="tel"
+                maxLength={15}
                 value={noHp}
                 onChange={(e) => setNoHp(e.target.value)}
                 placeholder="08123456789"
@@ -340,7 +394,7 @@ export default function TambahWarga({ user, rtInfo, onBack, onSuccess }: TambahW
             </div>
             <div>
               <label className="label">Alamat</label>
-              <input className="input min-h-[44px]" value={alamat} onChange={(e) => setAlamat(e.target.value)} />
+              <input className="input min-h-[44px]" value={alamat} maxLength={255} onChange={(e) => setAlamat(e.target.value)} />
             </div>
             <div>
               <label className="label">Pekerjaan</label>

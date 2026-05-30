@@ -239,7 +239,22 @@ export async function authRoutes(app: FastifyInstance) {
     };
   });
 
-  app.post('/register', async (req, reply) => {
+  app.post(
+    '/register',
+    {
+      config: {
+        rateLimit: {
+          max: 5,
+          timeWindow: '1 hour',
+          errorResponseBuilder: () => ({
+            statusCode: 429,
+            error: 'Too Many Requests',
+            message: 'Terlalu banyak pendaftaran dari IP ini. Coba lagi nanti.',
+          }),
+        },
+      },
+    },
+    async (req, reply) => {
     const body = (req.body ?? {}) as {
       nama?: string;
       noHp?: string;

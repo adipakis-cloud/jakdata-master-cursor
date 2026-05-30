@@ -107,13 +107,18 @@ export function AdminDashboard() {
   const [err, setErr] = useState('');
 
   const [overview, setOverview] = useState<any>(null);
+  const [wilayah, setWilayah] = useState<any>(null);
 
   const loadAll = useCallback(async () => {
     setErr('');
     setLoading(true);
     try {
-      const o = await api.get('/dashboard/territorial-overview');
+      const [o, w] = await Promise.all([
+        api.get('/dashboard/territorial-overview'),
+        api.get('/dashboard/wilayah-status'),
+      ]);
       setOverview(o.data);
+      setWilayah(w.data);
     } catch (e: any) {
       setErr(e.response?.data?.error ?? 'Gagal memuat dashboard intelijen');
     } finally {
@@ -135,6 +140,9 @@ export function AdminDashboard() {
   const l = overview?.laporan;
   const b = overview?.bantuan;
   const w = overview?.warmindo;
+  const ws = wilayah?.summary;
+  const kecPct =
+    ws && ws.totalKecamatan > 0 ? Math.round((ws.kecamatanAktif / ws.totalKecamatan) * 100) : 0;
 
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0 w-full">
@@ -159,6 +167,76 @@ export function AdminDashboard() {
 
         {overview && (
           <div className="space-y-6">
+            {ws && (
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                  <StatCard
+                    icon="📋"
+                    label="Laporan Masuk"
+                    value={(ws.totalLaporan ?? 0).toLocaleString('id-ID')}
+                    sub={`Hari ini: ${(ws.laporanHariIni ?? 0).toLocaleString('id-ID')}`}
+                  />
+                  <StatCard icon="👷" label="Koordinator Aktif" value={ws.totalKoordinator ?? 0} />
+                  <StatCard
+                    icon="👥"
+                    label="Warga Terdaftar"
+                    value={(ws.totalWarga ?? 0).toLocaleString('id-ID')}
+                  />
+                  <StatCard
+                    icon="🗺️"
+                    label="Wilayah Aktif"
+                    value={`${ws.kecamatanAktif ?? 0} / ${ws.totalKecamatan ?? 0}`}
+                    sub="Kecamatan Dapil 3"
+                  />
+                </div>
+
+                <div className="rounded-xl bg-white p-5 shadow border border-gray-100">
+                  <div className="flex justify-between items-center mb-2">
+                    <h2 className="font-semibold text-gray-900">Progress Kecamatan Aktif</h2>
+                    <span className="text-sm font-bold text-blue-700">{kecPct}%</span>
+                  </div>
+                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-green-500 transition-all"
+                      style={{ width: `${kecPct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    {ws.kecamatanAktif} dari {ws.totalKecamatan} kecamatan memiliki koordinator atau data
+                    operasional
+                  </p>
+                </div>
+
+                {wilayah?.recentLaporan?.length > 0 && (
+                  <div className="rounded-xl bg-white p-5 shadow border border-gray-100">
+                    <h2 className="font-semibold text-gray-900 mb-3">Laporan Terbaru (Dapil 3)</h2>
+                    <ul className="divide-y divide-gray-100">
+                      {wilayah.recentLaporan.map((lap: any) => (
+                        <li key={lap.id} className="py-2 flex justify-between gap-3 text-sm">
+                          <div>
+                            <span className="font-mono text-xs text-gray-500">{lap.kodeLaporan}</span>
+                            <p className="text-gray-800 capitalize">{String(lap.kategori).replace(/_/g, ' ')}</p>
+                            <p className="text-xs text-gray-500">{lap.namaPelapor ?? '—'}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="text-xs capitalize px-2 py-0.5 rounded bg-gray-100">
+                              {lap.status}
+                            </span>
+                            <p className="text-xs text-gray-400 mt-1">
+                              {new Date(lap.createdAt).toLocaleDateString('id-ID')}
+                            </p>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <Link to="/admin/laporan" className="inline-block mt-3 text-sm font-semibold text-blue-700 hover:underline">
+                      Semua laporan →
+                    </Link>
+                  </div>
+                )}
+              </>
+            )}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6 gap-4">
               <StatCard icon="🏛️" label="Total Kecamatan" value={t?.kecamatan ?? '—'} />
               <StatCard icon="🏘️" label="Total Kelurahan" value={t?.kelurahan ?? '—'} />
