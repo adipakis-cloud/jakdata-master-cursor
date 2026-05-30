@@ -6,7 +6,7 @@ export let redisConnection: IORedis | null = null;
 export let aiQueue: Queue | null = null;
 export let economicQueue: Queue | null = null;
 
-const REDIS_ENABLED = process.env.REDIS_URL || process.env.REDIS_HOST ? true : false;
+const REDIS_ENABLED = !!(process.env.REDIS_URL || process.env.REDIS_HOST) && process.env.ENABLE_REDIS !== "false";
 
 if (REDIS_ENABLED) {
   const redisUrl = process.env.REDIS_URL;
@@ -35,4 +35,5 @@ if (REDIS_ENABLED) {
 } else {
   console.log("Redis not configured — queue disabled. API runs normally.");
 }
+
 
