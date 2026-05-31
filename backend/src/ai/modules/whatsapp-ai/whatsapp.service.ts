@@ -22,6 +22,38 @@ const QRCodeImage = require("qrcode");
 let globalSocket: ReturnType<typeof makeWASocket> | null = null;
 let isConnected = false;
 
+function getWaAuthPath(): string {
+  return path.join(process.cwd(), "wa-auth");
+}
+
+function waAuthCredsExist(): boolean {
+  return fs.existsSync(path.join(getWaAuthPath(), "creds.json"));
+}
+
+function clearWaAuthDir(): void {
+  const authPath = getWaAuthPath();
+  if (fs.existsSync(authPath)) {
+    fs.rmSync(authPath, { recursive: true, force: true });
+    console.log("[WhatsApp AI] Folder wa-auth dibersihkan");
+  }
+}
+
+/** 401/loggedOut: reconnect + QR baru hanya jika creds belum ada; creds expired → stop. */
+function shouldReconnectAfterDisconnect(statusCode: number | undefined): boolean {
+  if (statusCode === DisconnectReason.loggedOut) {
+    if (!waAuthCredsExist()) {
+      console.log(
+        "[WhatsApp AI] Disconnect 401 — wa-auth/creds.json tidak ada, bersihkan session dan reconnect untuk QR baru",
+      );
+      clearWaAuthDir();
+      return true;
+    }
+    console.log("[WhatsApp AI] Disconnect 401 — creds ada (session logout/expired), tidak reconnect");
+    return false;
+  }
+  return true;
+}
+
 function normalizeWANumber(jid: string): string {
   return jidToPhone(jid);
 }
@@ -59,7 +91,7 @@ async function forwardEmergencyToKoordinator(params: {
 }
 
 export async function startWhatsappAI(): Promise<void> {
-  const authPath = path.join(process.cwd(), "wa-auth");
+  const authPath = getWaAuthPath();
   const { state, saveCreds } = await useMultiFileAuthState(authPath);
 
   const sock = makeWASocket({
@@ -132,16 +164,21 @@ export async function startWhatsappAI(): Promise<void> {
 
     if (connection === "close") {
       isConnected = false;
+      globalSocket = null;
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+      const shouldReconnect = shouldReconnectAfterDisconnect(statusCode);
 
       console.log(
-        `[WhatsApp AI] Koneksi terputus (${statusCode}). Reconnect: ${shouldReconnect}`
+        `[WhatsApp AI] Koneksi terputus (${statusCode}). Reconnect: ${shouldReconnect}`,
       );
 
       await prisma.whatsappSession.upsert({
         where: { sessionKey: "main" },
-        update: { status: "disconnected", lastSeen: new Date() },
+        update: {
+          status: shouldReconnect && !waAuthCredsExist() ? "qr_pending" : "disconnected",
+          ...(shouldReconnect && !waAuthCredsExist() ? { qrCode: null } : {}),
+          lastSeen: new Date(),
+        },
         create: { sessionKey: "main", status: "disconnected" },
       });
 
@@ -149,7 +186,7 @@ export async function startWhatsappAI(): Promise<void> {
         console.log("[WhatsApp AI] Mencoba reconnect dalam 10 detik...");
         setTimeout(() => {
           startWhatsappAI().catch((err) =>
-            console.error("[WhatsApp AI] Reconnect gagal:", err)
+            console.error("[WhatsApp AI] Reconnect gagal:", err),
           );
         }, 10000);
       }
@@ -339,10 +376,7 @@ export async function forceWhatsappReconnect(): Promise<void> {
     globalSocket = null;
   }
 
-  const authPath = path.join(process.cwd(), "wa-auth");
-  if (fs.existsSync(authPath)) {
-    fs.rmSync(authPath, { recursive: true, force: true });
-  }
+  clearWaAuthDir();
 
   await prisma.whatsappSession.upsert({
     where: { sessionKey: "main" },
