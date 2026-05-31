@@ -6,6 +6,7 @@ import { Boom } from "@hapi/boom";
 import * as path from "path";
 import * as fs from "fs";
 import { prisma } from "../../../config/prisma";
+import { jidToPhone } from "../../../lib/waPhone";
 import {
   buildKoordinatorForwardText,
   createEmergencyAlert,
@@ -22,26 +23,7 @@ let globalSocket: ReturnType<typeof makeWASocket> | null = null;
 let isConnected = false;
 
 function normalizeWANumber(jid: string): string {
-  if (!jid) return jid;
-
-  if (jid.includes("@lid")) {
-    return "lid-internal";
-  }
-
-  let num = jid
-    .replace("@s.whatsapp.net", "")
-    .replace("@c.us", "")
-    .trim();
-
-  if (!/^\d+$/.test(num)) return "unknown";
-
-  if (num.length > 15) return "lid-internal";
-
-  if (num.startsWith("08")) {
-    return "62" + num.slice(1);
-  }
-
-  return num;
+  return jidToPhone(jid);
 }
 
 async function forwardEmergencyToKoordinator(params: {
@@ -298,7 +280,7 @@ export async function startWhatsappAI(): Promise<void> {
               const ctx = await resolveSenderContext(from);
               const text =
                 `🚨 *LAPORAN DARURAT JAKDATA (belum terdaftar formal)*\n\n` +
-                `Dari: ${ctx.warga?.nama ?? "Warga"} (${ctx.phone})\n` +
+                `Dari: ${ctx.warga?.nama ?? "Warga"} (${jidToPhone(from)})\n` +
                 `Wilayah: ${ctx.wilayahLabel}\n\n` +
                 `Pesan:\n${displayBody.substring(0, 400)}`;
               for (const phone of phones) {
@@ -308,12 +290,12 @@ export async function startWhatsappAI(): Promise<void> {
             }
           }
 
-          console.warn(`[WhatsApp AI] 🚨 DARURAT — laporan ${result.laporanId ?? "n/a"} dari ${from}`);
+          console.warn(`[WhatsApp AI] 🚨 DARURAT — laporan ${result.laporanId ?? "n/a"} dari ${jidToPhone(from)}`);
         }
 
-        console.log(`[WhatsApp AI] ✓ Balasan terkirim ke ${from}`);
+        console.log(`[WhatsApp AI] ✓ Balasan terkirim ke ${jidToPhone(from)}`);
       } catch (err) {
-        console.error(`[WhatsApp AI] Error memproses pesan dari ${from}:`, err);
+        console.error(`[WhatsApp AI] Error memproses pesan dari ${jidToPhone(from)}:`, err);
 
         const errorMessage =
           err instanceof Error ? err.message : typeof err === "string" ? err : JSON.stringify(err);

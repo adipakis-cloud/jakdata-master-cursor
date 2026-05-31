@@ -163,7 +163,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           wargaCountForKecamatan(kec.id),
         ]);
         const status =
-          koordinatorCount > 0 || laporanCount > 0 || wargaCount > 0 ? 'aktif' : 'belum_aktif';
+          koordinatorCount > 0 || laporanCount > 0 ? 'aktif' : 'belum_aktif';
 
         const kelurahan = await Promise.all(
           kec.kelurahan.map(async (kel) => {
@@ -175,7 +175,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
             return {
               id: kel.id,
               nama: kel.nama,
-              status: kKoord > 0 || kLap > 0 || kWarga > 0 ? 'aktif' : 'belum_aktif',
+              status: kKoord > 0 || kLap > 0 ? 'aktif' : 'belum_aktif',
               koordinatorCount: kKoord,
               laporanCount: kLap,
               wargaCount: kWarga,
@@ -202,6 +202,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       0,
     );
     const kecamatanAktif = kecamatan.filter((k) => k.status === 'aktif').length;
+    const kecamatanDenganKoordinator = kecamatan.filter((k) => k.koordinatorCount > 0).length;
 
     const dapilRtIds = (
       await prisma.rT.findMany({
@@ -215,12 +216,6 @@ export async function dashboardRoutes(app: FastifyInstance) {
         where: {
           aktif: true,
           role: { in: koordRoles },
-          OR: [
-            { kecamatan: dapil3KecamatanWhere() },
-            { kelurahan: dapil3KelurahanWhere() },
-            { rw: { kelurahan: dapil3KelurahanWhere() } },
-            { rt: { rw: { kelurahan: dapil3KelurahanWhere() } } },
-          ],
         },
       }),
       prisma.laporanWarga.count({
@@ -275,6 +270,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
       summary: {
         totalKecamatan: kecamatan.length,
         kecamatanAktif,
+        kecamatanDenganKoordinator,
         totalKelurahan,
         kelurahanAktif,
         totalKoordinator,

@@ -117,6 +117,17 @@ export function AdminWarga() {
 }
 
 // ── AdminLaporan.tsx ─────────────────────────────────────────────
+function formatPhone(raw: string): string {
+  const match = raw?.match(/^(\d+)(?::\d+)?@/);
+  if (match) {
+    let phone = match[1];
+    if (phone.startsWith('628')) phone = '0' + phone.slice(2);
+    return phone;
+  }
+  if (raw?.startsWith('628')) return '0' + raw.slice(2);
+  return raw || '-';
+}
+
 export function AdminLaporan() {
   const [laporan, setLaporan] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -171,6 +182,7 @@ export function AdminLaporan() {
                     <span className="badge-gray text-xs">{l.kategori}</span>
                   </div>
                   <p className="text-sm font-medium text-gray-800 mt-1">{l.namaPelapor ?? 'Anonim'}</p>
+                  {l.noHpPelapor && <p className="text-xs text-gray-500">{formatPhone(l.noHpPelapor)}</p>}
                   <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{l.aiSummary ?? l.isiLaporan}</p>
                   <p className="text-xs text-gray-400 mt-0.5">{l.lokasiText ?? '—'} · {new Date(l.createdAt).toLocaleString('id-ID')}</p>
                 </div>
@@ -198,6 +210,9 @@ export function AdminLaporan() {
                 {selected.subkategori && <span className="badge-gray">{selected.subkategori}</span>}
               </div>
               <div><p className="label">Isi Laporan</p><p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{selected.isiLaporan}</p></div>
+              {selected.noHpPelapor && (
+                <div><p className="label">Nomor HP</p><p className="text-sm text-gray-700">{formatPhone(selected.noHpPelapor)}</p></div>
+              )}
               {selected.aiSummary && <div><p className="label">Ringkasan AI</p><p className="text-sm text-blue-700 bg-blue-50 rounded-lg p-3">🤖 {selected.aiSummary}</p></div>}
               {selected.lampiranUrls?.length > 0 && (
                 <div><p className="label">Lampiran</p>

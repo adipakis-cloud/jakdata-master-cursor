@@ -1,5 +1,6 @@
 import type { LaporanWarga, ReportStatus, UrgencyLevel } from "@prisma/client";
 import { prisma } from "../../../config/prisma";
+import { formatPhone, jidToPhone, toWaMatchPhone } from "../../../lib/waPhone";
 import { aiQueue } from "../../../queues/queue.config";
 import { callAIJson } from "../../core/anthropic.service";
 
@@ -47,10 +48,11 @@ const KODE_PATTERN =
   /\b((?:LPR|JAK|LP)-[\d]{4,}(?:-[\d]{3,5})?|[A-Z]{2,4}-\d{4}-\d{3,5})\b/i;
 
 export function phoneFromJid(jid: string): string {
-  const digits = jid.replace(/@.*$/, "").replace(/\D/g, "");
-  if (digits.startsWith("62")) return digits;
-  if (digits.startsWith("0")) return `62${digits.slice(1)}`;
-  return digits;
+  return toWaMatchPhone(jid);
+}
+
+export function phoneDisplay(phoneOrJid: string): string {
+  return formatPhone(phoneOrJid);
 }
 
 export function phoneVariants(phone: string): string[] {
@@ -224,7 +226,7 @@ async function resolveTerritoryIds(
   });
 
   console.warn(
-    `[JAKDATA][WA Laporan] Pengirim ${ctx.phone} tidak terdaftar — laporan masuk tanpa wilayah spesifik` +
+    `[JAKDATA][WA Laporan] Pengirim ${phoneDisplay(ctx.phone)} tidak terdaftar — laporan masuk tanpa wilayah spesifik` +
       (fallbackKecamatan ? ` (fallback: ${fallbackKecamatan.nama})` : ''),
   );
 
@@ -254,7 +256,7 @@ export async function createLaporanFromWhatsApp(params: {
       kodeLaporan,
       channelType: "whatsapp",
       namaPelapor: ctx.warga?.nama ?? "Warga (via WhatsApp)",
-      noHpPelapor: ctx.phone.startsWith("62") ? `0${ctx.phone.slice(2)}` : ctx.phone,
+      noHpPelapor: phoneDisplay(ctx.phone),
       isiLaporan:
         messageType !== "text" && !isiLaporan.includes("[")
           ? `[${messageType}] ${isiLaporan}`
@@ -321,7 +323,7 @@ export function buildKoordinatorForwardText(
   return (
     `🚨 *LAPORAN DARURAT JAKDATA*\n\n` +
     `Kode: *${laporan.kodeLaporan}*\n` +
-    `Pelapor: ${pelapor} (${ctx.phone})\n` +
+    `Pelapor: ${pelapor} (${phoneDisplay(ctx.phone)})\n` +
     `Wilayah: ${laporan.lokasiText ?? ctx.wilayahLabel}\n` +
     `Kategori: ${laporan.kategori}\n\n` +
     `Isi:\n${originalBody.substring(0, 400)}\n\n` +
@@ -468,9 +470,9 @@ export async function createEmergencyAlert(params: {
       wilayahScope: "rt",
       wilayahId: params.rtId != null ? String(params.rtId) : "unknown",
       title: "🚨 DARURAT via WhatsApp",
-      description: `Pesan darurat dari ${params.from}: ${params.body.substring(0, 200)}`,
+      description: `Pesan darurat dari ${jidToPhone(params.from)}: ${params.body.substring(0, 200)}`,
       payload: {
-        from: params.from,
+        from: jidToPhone(params.from),
         messageId: params.messageId,
         laporanId: params.laporanId,
         originalMessage: params.body,

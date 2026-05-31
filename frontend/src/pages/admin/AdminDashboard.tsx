@@ -142,7 +142,9 @@ export function AdminDashboard() {
   const w = overview?.warmindo;
   const ws = wilayah?.summary;
   const kecPct =
-    ws && ws.totalKecamatan > 0 ? Math.round((ws.kecamatanAktif / ws.totalKecamatan) * 100) : 0;
+    ws && ws.totalKecamatan > 0
+      ? Math.round(((ws.kecamatanDenganKoordinator ?? ws.kecamatanAktif ?? 0) / ws.totalKecamatan) * 100)
+      : 0;
 
   return (
     <div className="flex flex-col flex-1 min-w-0 min-h-0 w-full">
@@ -185,8 +187,8 @@ export function AdminDashboard() {
                   <StatCard
                     icon="🗺️"
                     label="Wilayah Aktif"
-                    value={`${ws.kecamatanAktif ?? 0} / ${ws.totalKecamatan ?? 0}`}
-                    sub="Kecamatan Dapil 3"
+                    value={`${ws.kecamatanDenganKoordinator ?? ws.kecamatanAktif ?? 0} / ${ws.totalKecamatan ?? 0}`}
+                    sub="Kecamatan dengan koordinator"
                   />
                 </div>
 
@@ -202,8 +204,8 @@ export function AdminDashboard() {
                     />
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    {ws.kecamatanAktif} dari {ws.totalKecamatan} kecamatan memiliki koordinator atau data
-                    operasional
+                    {ws.kecamatanDenganKoordinator ?? ws.kecamatanAktif ?? 0} dari {ws.totalKecamatan} kecamatan
+                    memiliki koordinator aktif ({ws.kecamatanAktif ?? 0} aktif termasuk laporan masuk)
                   </p>
                 </div>
 

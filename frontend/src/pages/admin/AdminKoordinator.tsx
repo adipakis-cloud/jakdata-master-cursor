@@ -4,26 +4,52 @@ import { api } from '../../lib/api';
 export function AdminKoordinator() {
   const [assignments, setAssignments] = useState<any[]>([]);
   const [kosong, setKosong] = useState<any[]>([]);
+  const [kecamatanList, setKecamatanList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('aktif');
   const [levelFilter, setLevelFilter] = useState('');
+  const [kecamatanFilter, setKecamatanFilter] = useState('');
   const [kosongLevel, setKosongLevel] = useState('kecamatan');
 
-  useEffect(()=>{
+  async function loadAssignments(kecamatanId = kecamatanFilter) {
+    const params = kecamatanId ? { kecamatanId } : {};
+    const r = await api.get('/koordinator', { params });
+    setAssignments(r.data);
+  }
+
+  useEffect(() => {
     Promise.all([
       api.get('/koordinator'),
       api.get('/koordinator/kosong?level=kecamatan'),
-    ]).then(([a,k])=>{ setAssignments(a.data); setKosong(k.data); })
-    .catch(console.error).finally(()=>setLoading(false));
-  },[]);
+      api.get('/wilayah/kecamatan'),
+    ])
+      .then(([a, k, kec]) => {
+        setAssignments(a.data);
+        setKosong(k.data);
+        setKecamatanList(kec.data ?? []);
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function handleKecamatanFilter(value: string) {
+    setKecamatanFilter(value);
+    try {
+      await loadAssignments(value);
+    } catch (e) {
+      console.error(e);
+    }
+  }
 
   async function loadKosong(lv: string) {
     setKosongLevel(lv);
-    const r = await api.get('/koordinator/kosong?level=' + lv);
+    const params: Record<string, string> = { level: lv };
+    if (kecamatanFilter) params.kecamatanId = kecamatanFilter;
+    const r = await api.get('/koordinator/kosong', { params });
     setKosong(r.data);
   }
 
-  const filtered = assignments.filter(a => !levelFilter || a.level === levelFilter);
+  const filtered = assignments.filter((a) => !levelFilter || a.level === levelFilter);
 
   if (loading) return <div style={{padding:40,textAlign:'center',color:'#9CA3AF'}}>Memuat data koordinator...</div>;
 
@@ -55,13 +81,21 @@ export function AdminKoordinator() {
 
       {activeTab === 'aktif' ? (
         <div style={{display:'flex',flexDirection:'column',gap:12}}>
-          <select className="input" style={{width:'auto'}} value={levelFilter} onChange={e=>setLevelFilter(e.target.value)}>
-            <option value="">Semua Level</option>
-            <option value="kecamatan">Kecamatan</option>
-            <option value="kelurahan">Kelurahan</option>
-            <option value="rw">RW</option>
-            <option value="rt">RT</option>
-          </select>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <select className="input" style={{width:'auto'}} value={kecamatanFilter} onChange={e=>handleKecamatanFilter(e.target.value)}>
+              <option value="">Semua Kecamatan</option>
+              {kecamatanList.map((k:any) => (
+                <option key={k.id} value={k.id}>{k.nama}</option>
+              ))}
+            </select>
+            <select className="input" style={{width:'auto'}} value={levelFilter} onChange={e=>setLevelFilter(e.target.value)}>
+              <option value="">Semua Level</option>
+              <option value="kecamatan">Kecamatan</option>
+              <option value="kelurahan">Kelurahan</option>
+              <option value="rw">RW</option>
+              <option value="rt">RT</option>
+            </select>
+          </div>
           <div className="card" style={{overflow:'hidden'}}>
             <table style={{width:'100%',fontSize:14,borderCollapse:'collapse'}}>
               <thead style={{background:'#F9FAFB',borderBottom:'1px solid #E5E7EB'}}>
