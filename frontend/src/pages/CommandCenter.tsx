@@ -39,6 +39,7 @@ interface HealthScore {
 interface WhatsappMsg {
   id: string;
   from: string;
+  fromReadable?: string;
   body: string | null;
   aiReply: string | null;
   aiProcessed: boolean;
@@ -106,7 +107,7 @@ function AlertCard({ alert, onResolve }: { alert: AiAlert; onResolve: (id: strin
             <span style={{ fontSize: 10, color: "#6b7280", background: "#1f2937", padding: "2px 6px", borderRadius: 4 }}>{alert.alertType.toUpperCase()}</span>
           </div>
           <p style={{ color: "#f3f4f6", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 4 }}>{alert.title}</p>
-          <p style={{ color: "#9ca3af", fontSize: 12, margin: 0 }}>{alert.description}</p>
+          <p style={{ color: "#9ca3af", fontSize: 12, margin: 0 }}>{formatAlertDescription(alert.description)}</p>
         </div>
         <button type="button" onClick={() => onResolve(alert.id)} style={{ marginLeft: 12, background: "transparent", border: `1px solid ${cfg.color}66`, color: cfg.color, borderRadius: 6, padding: "4px 10px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}>Selesai</button>
       </div>
@@ -162,21 +163,24 @@ function HealthScoreCard({ score }: { score: HealthScore }) {
 }
 
 function formatWANumber(from: string): string {
-  let num = from
-    .replace("@s.whatsapp.net", "")
-    .replace("@lid", "")
-    .replace("@c.us", "")
-    .trim();
-
-  if (!/^\d+$/.test(num) || num.length > 15) {
-    return "Pengirim WA (ID internal)";
+  if (!from) return 'Tidak diketahui';
+  const match = from.match(/^(\d+)(?::\d+)?@/);
+  if (match) {
+    let phone = match[1];
+    if (phone.startsWith('628')) phone = '0' + phone.slice(2);
+    else if (phone.startsWith('62')) phone = '0' + phone.slice(2);
+    return phone;
   }
+  if (from.includes('@lid') || from === 'lid-internal') return 'Pengirim WA (ID internal)';
+  const digits = from.replace(/\D/g, '');
+  if (digits.length > 13) return 'Pengirim WA (ID internal)';
+  if (from.startsWith('628')) return '0' + from.slice(2);
+  if (from.startsWith('62')) return '0' + from.slice(2);
+  return from;
+}
 
-  if (num.startsWith("62")) {
-    num = "0" + num.slice(2);
-  }
-
-  return num;
+function formatAlertDescription(desc: string): string {
+  return desc.replace(/(\d+(?::\d+)?@[^\s]+)/g, (m) => formatWANumber(m));
 }
 
 export default function CommandCenter() {
@@ -386,7 +390,7 @@ export default function CommandCenter() {
                     >
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                         <span style={{ color: "#16a34a", fontSize: 12, fontWeight: 600 }}>
-                          💬 {formatWANumber(msg.from)}
+                          💬 {msg.fromReadable ?? formatWANumber(msg.from)}
                         </span>
                         <div style={{ display: "flex", gap: 8 }}>
                           <span

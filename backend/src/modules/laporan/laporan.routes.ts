@@ -4,6 +4,7 @@ import { aiQueue } from '../../queues/queue.config';
 import path from 'path';
 import fs from 'fs';
 import { getPagination } from '../../lib/pagination';
+import { trySendLaporanWa, sendLaporanKonfirmasiWa, sendLaporanStatusWa } from '../../lib/laporanWaNotify';
 import { sanitizeObject } from '../../lib/sanitize';
 import { territoryScopeMiddleware } from '../../middleware/territoryScope.middleware';
 import {
@@ -108,6 +109,24 @@ export async function laporanRoutes(app: FastifyInstance) {
         .catch((err) => console.error('[Laporan] Gagal enqueue fraud-check:', err.message));
     }
 
+    const pelaporUser = await prisma.user.findUnique({
+      where: { id: user.sub },
+      select: { noHp: true },
+    });
+    const notifyHp = body.noHpPelapor ?? pelaporUser?.noHp ?? null;
+    if (notifyHp && laporan.channelType !== 'whatsapp') {
+      void trySendLaporanWa(
+        () =>
+          sendLaporanKonfirmasiWa({
+            noHp: notifyHp,
+            kodeLaporan: laporan.kodeLaporan,
+            kategori: laporan.kategori,
+            namaPelapor: laporan.namaPelapor ?? undefined,
+          }),
+        'konfirmasi',
+      );
+    }
+
     return reply.code(201).send(laporan);
   });
 
@@ -141,6 +160,20 @@ export async function laporanRoutes(app: FastifyInstance) {
         data: { laporanId: +id, senderType: 'admin', messageText: catatan, isInternal: true },
       });
     }
+
+    if (laporan.noHpPelapor && laporan.channelType !== 'whatsapp') {
+      void trySendLaporanWa(
+        () =>
+          sendLaporanStatusWa({
+            noHp: laporan.noHpPelapor!,
+            kodeLaporan: laporan.kodeLaporan,
+            status,
+            catatan,
+          }),
+        'update status',
+      );
+    }
+
     return laporan;
   });
 

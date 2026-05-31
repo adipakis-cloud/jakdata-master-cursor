@@ -1,5 +1,9 @@
 import { FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { pipeline } from 'stream/promises';
 import { prisma } from '../../config/prisma';
 import { computeWilayahMeta, loginRedirectTo } from '../../lib/loginWilayah';
 import {
@@ -20,6 +24,51 @@ import {
 function jwtUserId(req: { user?: { sub?: number; userId?: number } }): number {
   const u = req.user ?? {};
   return Number(u.userId ?? u.sub);
+}
+
+async function parseRegisterPayload(req: any): Promise<{
+  body: Record<string, string>;
+  fotoKtp?: { file: NodeJS.ReadableStream; filename: string; mimetype: string };
+}> {
+  if (!req.isMultipart()) {
+    const raw = (req.body ?? {}) as Record<string, unknown>;
+    const body: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (v != null) body[k] = String(v);
+    }
+    return { body };
+  }
+
+  const body: Record<string, string> = {};
+  let fotoKtp: { file: NodeJS.ReadableStream; filename: string; mimetype: string } | undefined;
+
+  for await (const part of req.parts()) {
+    if (part.type === 'file' && part.fieldname === 'fotoKtp') {
+      fotoKtp = {
+        file: part.file,
+        filename: part.filename,
+        mimetype: part.mimetype,
+      };
+    } else if (part.type === 'field') {
+      body[part.fieldname] = String(part.value);
+    }
+  }
+
+  return { body, fotoKtp };
+}
+
+async function saveRegisterFotoKtp(
+  userId: number,
+  foto: { file: NodeJS.ReadableStream; filename: string; mimetype: string },
+): Promise<string | null> {
+  if (!foto.mimetype.startsWith('image/')) return null;
+  const ext = path.extname(foto.filename || '') || '.jpg';
+  const fname = `koordinator-${userId}-${Date.now()}${ext}`;
+  const uploadDir = path.join(process.cwd(), 'uploads', 'ktp');
+  fs.mkdirSync(uploadDir, { recursive: true });
+  const dest = path.join(uploadDir, fname);
+  await pipeline(foto.file, fs.createWriteStream(dest));
+  return `/uploads/ktp/${fname}`;
 }
 
 export async function authRoutes(app: FastifyInstance) {
@@ -255,23 +304,30 @@ export async function authRoutes(app: FastifyInstance) {
       },
     },
     async (req, reply) => {
-    const body = (req.body ?? {}) as {
+    const { body: rawBody, fotoKtp } = await parseRegisterPayload(req);
+    const body = rawBody as {
       nama?: string;
       noHp?: string;
+      nik?: string;
       password?: string;
       confirmPassword?: string;
       activationCode?: string;
-      kecamatanId?: number;
-      kelurahanId?: number;
-      rwId?: number;
-      rtId?: number;
+      kecamatanId?: string | number;
+      kelurahanId?: string | number;
+      rwId?: string | number;
+      rtId?: string | number;
     };
 
     const nama = String(body.nama ?? '').trim();
     const activationCode = String(body.activationCode ?? '').trim();
+    const nik = String(body.nik ?? '').replace(/\D/g, '');
 
     if (!nama || !body.noHp || !body.password || !body.confirmPassword || !activationCode) {
       return reply.code(400).send({ error: 'Semua field wajib diisi' });
+    }
+
+    if (nik && nik.length !== 16) {
+      return reply.code(400).send({ error: 'NIK KTP harus 16 digit' });
     }
 
     const code = await findActivationCode(activationCode);
@@ -369,6 +425,17 @@ export async function authRoutes(app: FastifyInstance) {
 
     await incrementActivationCodeUsage(activationCode);
 
+    let fotoKtpUrl: string | null = null;
+    if (fotoKtp) {
+      try {
+        fotoKtpUrl = await saveRegisterFotoKtp(user.id, fotoKtp);
+      } catch (err) {
+        console.warn('[Auth] Gagal simpan foto KTP registrasi:', err);
+      }
+    }
+
+    const nikHash = nik ? crypto.createHash('sha256').update(nik).digest('hex') : null;
+
     const { wilayahId, wilayahType } = computeWilayahMeta(user);
     const redirectTo = loginRedirectTo(user.role);
     const token = app.jwt.sign(
@@ -394,7 +461,14 @@ export async function authRoutes(app: FastifyInstance) {
       userId: user.id,
       action: 'auth.register',
       ipAddress: req.ip ?? 'unknown',
-      newValues: { email, role, kecamatanId },
+      newValues: {
+        email,
+        role,
+        kecamatanId,
+        nikHash,
+        nikLast4: nik ? nik.slice(-4) : null,
+        fotoKtpUrl,
+      },
     });
 
     return {

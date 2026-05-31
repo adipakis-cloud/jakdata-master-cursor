@@ -10,6 +10,11 @@ export function AdminKoordinator() {
   const [levelFilter, setLevelFilter] = useState('');
   const [kecamatanFilter, setKecamatanFilter] = useState('');
   const [kosongLevel, setKosongLevel] = useState('kecamatan');
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [broadcastLevel, setBroadcastLevel] = useState('semua');
+  const [broadcastPesan, setBroadcastPesan] = useState('');
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [broadcastResult, setBroadcastResult] = useState<any>(null);
 
   async function loadAssignments(kecamatanId = kecamatanFilter) {
     const params = kecamatanId ? { kecamatanId } : {};
@@ -41,6 +46,22 @@ export function AdminKoordinator() {
     }
   }
 
+  async function handleBroadcast() {
+    if (!broadcastPesan.trim()) return;
+    setBroadcastLoading(true);
+    setBroadcastResult(null);
+    try {
+      const payload: Record<string, unknown> = { pesan: broadcastPesan, level: broadcastLevel };
+      if (kecamatanFilter) payload.kecamatanId = Number(kecamatanFilter);
+      const r = await api.post('/koordinator/broadcast', payload);
+      setBroadcastResult(r.data);
+    } catch (e: any) {
+      setBroadcastResult({ error: e.response?.data?.error ?? 'Gagal mengirim broadcast' });
+    } finally {
+      setBroadcastLoading(false);
+    }
+  }
+
   async function loadKosong(lv: string) {
     setKosongLevel(lv);
     const params: Record<string, string> = { level: lv };
@@ -55,9 +76,18 @@ export function AdminKoordinator() {
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:20}}>
-      <div>
-        <h1 style={{fontSize:20,fontWeight:700,color:'#111827',margin:0}}>Koordinator Wilayah</h1>
-        <p style={{fontSize:14,color:'#6B7280',marginTop:4}}>{assignments.length} koordinator aktif</p>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}>
+        <div>
+          <h1 style={{fontSize:20,fontWeight:700,color:'#111827',margin:0}}>Koordinator Wilayah</h1>
+          <p style={{fontSize:14,color:'#6B7280',marginTop:4}}>{assignments.length} koordinator aktif</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => { setShowBroadcast(true); setBroadcastResult(null); }}
+          style={{background:'#2563eb',color:'#fff',padding:'8px 16px',borderRadius:8,fontSize:13,fontWeight:600,border:'none',cursor:'pointer'}}
+        >
+          📢 Kirim Pesan ke Koordinator
+        </button>
       </div>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12}}>
@@ -148,6 +178,57 @@ export function AdminKoordinator() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+      {showBroadcast && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:50}}>
+          <div style={{background:'#fff',borderRadius:12,padding:24,width:'100%',maxWidth:420}}>
+            <h3 style={{fontWeight:600,fontSize:18,marginBottom:16}}>Broadcast ke Koordinator</h3>
+            <select
+              className="input"
+              style={{width:'100%',marginBottom:12}}
+              value={broadcastLevel}
+              onChange={(e) => setBroadcastLevel(e.target.value)}
+            >
+              <option value="semua">Semua Koordinator</option>
+              <option value="kecamatan">Koordinator Kecamatan</option>
+              <option value="kelurahan">Koordinator Kelurahan</option>
+              <option value="rw">Koordinator RW</option>
+              <option value="rt">Koordinator RT</option>
+            </select>
+            <textarea
+              className="input"
+              style={{width:'100%',height:128,marginBottom:12}}
+              placeholder="Tulis pesan untuk dikirim via WhatsApp..."
+              value={broadcastPesan}
+              onChange={(e) => setBroadcastPesan(e.target.value)}
+            />
+            {broadcastResult && !broadcastResult.error && (
+              <p style={{fontSize:13,color:'#059669',marginBottom:12}}>
+                ✓ Terkirim: {broadcastResult.terkirim} / {broadcastResult.totalTarget} (gagal: {broadcastResult.gagal})
+              </p>
+            )}
+            {broadcastResult?.error && (
+              <p style={{fontSize:13,color:'#dc2626',marginBottom:12}}>{broadcastResult.error}</p>
+            )}
+            <div style={{display:'flex',gap:8}}>
+              <button
+                type="button"
+                onClick={handleBroadcast}
+                disabled={broadcastLoading || !broadcastPesan.trim()}
+                style={{flex:1,background:'#2563eb',color:'#fff',padding:'8px 0',borderRadius:8,border:'none',cursor:'pointer'}}
+              >
+                {broadcastLoading ? 'Mengirim…' : 'Kirim via WA'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowBroadcast(false)}
+                style={{flex:1,border:'1px solid #e5e7eb',padding:'8px 0',borderRadius:8,cursor:'pointer',background:'#fff'}}
+              >
+                Batal
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1,29 +1,28 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma';
-import { DAPIL3_KOTA_KODES } from './dapil3';
 
-/** Kecamatan Dapil 3 — singkatan kode aktivasi */
-const DAPIL3_KECAMATAN_CODES: { nama: string; singkat: string; kotaKode: string }[] = [
-  { nama: 'Cengkareng', singkat: 'CEG', kotaKode: '3173' },
-  { nama: 'Grogol Petamburan', singkat: 'GRP', kotaKode: '3173' },
-  { nama: 'Tambora', singkat: 'TMB', kotaKode: '3173' },
-  { nama: 'Taman Sari', singkat: 'TMS', kotaKode: '3173' },
-  { nama: 'Kebon Jeruk', singkat: 'KBJ', kotaKode: '3173' },
-  { nama: 'Kembangan', singkat: 'KMB', kotaKode: '3173' },
-  { nama: 'Kalideres', singkat: 'KLD', kotaKode: '3173' },
-  { nama: 'Palmerah', singkat: 'PLM', kotaKode: '3173' },
-  { nama: 'Penjaringan', singkat: 'PNJ', kotaKode: '3172' },
-  { nama: 'Pademangan', singkat: 'PDM', kotaKode: '3172' },
-  { nama: 'Tanjung Priok', singkat: 'TJP', kotaKode: '3172' },
-  { nama: 'Koja', singkat: 'KJA', kotaKode: '3172' },
-  { nama: 'Kelapa Gading', singkat: 'KLG', kotaKode: '3172' },
-  { nama: 'Cilincing', singkat: 'CLN', kotaKode: '3172' },
-  { nama: 'Kepulauan Seribu Utara', singkat: 'KSU', kotaKode: '3101' },
-  { nama: 'Kepulauan Seribu Selatan', singkat: 'KSS', kotaKode: '3101' },
-];
+/** Mapping: nama kecamatan → singkatan kode */
+const KECAMATAN_CODES: Record<string, string> = {
+  Cengkareng: 'CEG',
+  'Grogol Petamburan': 'GRP',
+  Tambora: 'TMB',
+  'Taman Sari': 'TMS',
+  'Kebon Jeruk': 'KBJ',
+  Kembangan: 'KMB',
+  Kalideres: 'KLD',
+  Palmerah: 'PLM',
+  Penjaringan: 'PNJ',
+  Pademangan: 'PDM',
+  'Tanjung Priok': 'TJP',
+  Koja: 'KJA',
+  'Kelapa Gading': 'KLG',
+  Cilincing: 'CLN',
+  'Kepulauan Seribu Utara': 'KSU',
+  'Kepulauan Seribu Selatan': 'KSS',
+};
 
-const LEVEL_SUFFIX = ['KEC', 'KEL', 'RW', 'RT'] as const;
-const LEVEL_MAP: Record<string, string> = {
+const LEVELS = ['KEC', 'KEL', 'RW', 'RT'] as const;
+const LEVEL_MAP: Record<(typeof LEVELS)[number], string> = {
   KEC: 'kecamatan',
   KEL: 'kelurahan',
   RW: 'rw',
@@ -47,40 +46,39 @@ export async function setupActivationCodes(): Promise<void> {
     )
   `);
 
-  let okCount = 0;
-  for (const spec of DAPIL3_KECAMATAN_CODES) {
+  console.log('[Setup] Memulai setup kode aktivasi semua Dapil 3...');
+
+  for (const [namaKec, singkatan] of Object.entries(KECAMATAN_CODES)) {
     try {
-      const kec = await prisma.kecamatan.findFirst({
+      const kecamatan = await prisma.kecamatan.findFirst({
         where: {
-          nama: { equals: spec.nama, mode: 'insensitive' },
-          kota: { kode: spec.kotaKode },
+          nama: { contains: namaKec.split(' ')[0], mode: 'insensitive' },
+          kota: { kode: { in: ['3172', '3173', '3101'] } },
         },
         select: { id: true, nama: true },
       });
 
-      if (!kec) {
-        console.warn(`[JAKDATA][Setup] Kode aktivasi ${spec.nama}: SKIP (tidak ditemukan)`);
+      if (!kecamatan) {
+        console.warn(`[Setup] Kecamatan tidak ditemukan: ${namaKec}`);
         continue;
       }
 
-      for (const suffix of LEVEL_SUFFIX) {
-        const kode = `${spec.singkat}-${suffix}-2026`;
+      for (const suffix of LEVELS) {
+        const kode = `${singkatan}-${suffix}-2026`;
         const level = LEVEL_MAP[suffix];
         await prisma.$executeRaw(
           Prisma.sql`INSERT INTO activation_codes (kode, level, kecamatan_id, max_usage, aktif)
-                     VALUES (${kode}, ${level}, ${kec.id}, 999, true)
-                     ON CONFLICT (kode) DO NOTHING`,
+                     VALUES (${kode}, ${level}, ${kecamatan.id}, 999, true)
+                     ON CONFLICT (kode) DO UPDATE SET aktif = true, kecamatan_id = EXCLUDED.kecamatan_id`,
         );
       }
 
-      okCount += 1;
-      console.log(`[JAKDATA][Setup] Kode aktivasi ${kec.nama}: OK`);
-    } catch (err) {
-      console.warn(`[JAKDATA][Setup] Kode aktivasi ${spec.nama}: SKIP`, (err as Error).message);
+      console.log(`[Setup] ✓ ${kecamatan.nama} (${singkatan}): 4 kode aktivasi ready`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[Setup] ✗ ${namaKec}: ${msg}`);
     }
   }
 
-  console.log(
-    `[JAKDATA][Setup] Activation codes Dapil 3 — ${okCount}/${DAPIL3_KECAMATAN_CODES.length} kecamatan (kota: ${DAPIL3_KOTA_KODES.join(', ')})`,
-  );
+  console.log('[Setup] ✓ Setup kode aktivasi selesai');
 }

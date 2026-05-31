@@ -258,7 +258,7 @@ export async function startWhatsappAI(): Promise<void> {
 
         if (result.isEmergency) {
           await createEmergencyAlert({
-            from,
+            from: jidToPhone(from),
             body: displayBody,
             replyText: result.replyText,
             messageId: saved.id,
@@ -359,4 +359,25 @@ export async function forceWhatsappReconnect(): Promise<void> {
 
   await startWhatsappAI();
 }
+
+/** Kirim pesan WA outbound (broadcast, konfirmasi laporan, dll). */
+export async function sendWhatsAppMessage(jidOrPhone: string, text: string): Promise<void> {
+  if (!globalSocket || !isConnected) {
+    throw new Error('WhatsApp belum terhubung');
+  }
+
+  let jid = jidOrPhone;
+  if (!jid.includes('@')) {
+    const digits = jid.replace(/\D/g, '');
+    if (!digits || digits === 'lidinternal') {
+      throw new Error('Nomor tujuan tidak valid');
+    }
+    const wa = digits.startsWith('62') ? digits : digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
+    jid = `${wa}@s.whatsapp.net`;
+  }
+
+  await globalSocket.sendMessage(jid, { text });
+}
+
+export { sendWhatsAppMessage as sendMessage };
 

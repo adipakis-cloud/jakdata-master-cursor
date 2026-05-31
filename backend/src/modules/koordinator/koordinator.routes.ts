@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { prisma } from '../../config/prisma';
+import { sendWhatsAppMessage } from '../../ai/modules/whatsapp-ai/whatsapp.service';
 import { dapil3KecamatanWhere, dapil3KelurahanWhere, KOORDINATOR_FIELD_ROLES } from '../../lib/dapil3';
 import { scoringRoutes } from './scoring.routes';
 import {
@@ -107,6 +108,81 @@ export async function koordinatorRoutes(app: FastifyInstance) {
 
   app.get('/', { preHandler: [app.authenticate, requireGovernance] }, listHandler);
   app.get('/aktif', { preHandler: [app.authenticate, requireGovernance] }, listHandler);
+
+  /** Broadcast pesan WA ke koordinator (admin pusat). */
+  app.post('/broadcast', { preHandler: [app.authenticate] }, async (req, reply) => {
+    const jwt = req.user as any;
+    if (jwt.role !== 'admin_pusat') {
+      return reply.code(403).send({ error: 'Hanya admin pusat yang bisa broadcast' });
+    }
+
+    const { pesan, level = 'semua', kecamatanId } = (req.body ?? {}) as {
+      pesan?: string;
+      level?: string;
+      kecamatanId?: number;
+    };
+
+    if (!pesan?.trim()) {
+      return reply.code(400).send({ error: 'Pesan wajib diisi' });
+    }
+
+    const roleFilter =
+      level === 'semua'
+        ? { in: KOORD_ROLES.filter((r) => r !== 'petugas_lapangan') }
+        : level === 'rt'
+          ? { in: ['koordinator_rt', 'petugas_lapangan'] as string[] }
+          : { equals: `koordinator_${level}` };
+
+    const kecId = kecamatanId ? Number(kecamatanId) : undefined;
+    const where: any = {
+      aktif: true,
+      role: roleFilter,
+      noHp: { not: null },
+    };
+
+    if (Number.isFinite(kecId)) {
+      where.OR = [
+        { kecamatanId: kecId },
+        { kelurahan: { kecamatanId: kecId } },
+        { rw: { kelurahan: { kecamatanId: kecId } } },
+        { rt: { rw: { kelurahan: { kecamatanId: kecId } } } },
+      ];
+    } else {
+      where.OR = [
+        { kecamatan: dapil3KecamatanWhere() },
+        { kelurahan: dapil3KelurahanWhere() },
+        { rw: { kelurahan: dapil3KelurahanWhere() } },
+        { rt: { rw: { kelurahan: dapil3KelurahanWhere() } } },
+      ];
+    }
+
+    const koordinators = await prisma.user.findMany({
+      where,
+      select: { id: true, nama: true, noHp: true, role: true },
+    });
+
+    let terkirim = 0;
+    let gagal = 0;
+    const detail: { nama: string; noHp: string; status: string }[] = [];
+    const text =
+      `📢 *Pesan dari JAKDATA Command Center*\n\n${pesan.trim()}\n\n_Pesan ini dikirim otomatis oleh sistem JAKDATA_`;
+
+    for (const k of koordinators) {
+      if (!k.noHp) continue;
+      try {
+        const digits = k.noHp.replace(/\D/g, '');
+        const wa = digits.startsWith('62') ? digits : digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
+        await sendWhatsAppMessage(`${wa}@s.whatsapp.net`, text);
+        terkirim += 1;
+        detail.push({ nama: k.nama, noHp: k.noHp, status: 'terkirim' });
+      } catch {
+        gagal += 1;
+        detail.push({ nama: k.nama, noHp: k.noHp ?? '', status: 'gagal' });
+      }
+    }
+
+    return { terkirim, gagal, totalTarget: koordinators.length, detail };
+  });
 
   /** Wilayah tanpa koordinator pada level tertentu. */
   app.get('/kosong', { preHandler: [app.authenticate, requireGovernance] }, async (req) => {

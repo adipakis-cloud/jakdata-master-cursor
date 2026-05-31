@@ -51,6 +51,8 @@ export function RegisterPage() {
 
   const [nama, setNama] = useState('');
   const [noHp, setNoHp] = useState('');
+  const [nik, setNik] = useState('');
+  const [fotoKTP, setFotoKTP] = useState<File | null>(null);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
 
@@ -145,17 +147,39 @@ export function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      const { data } = await api.post('/auth/register', {
-        nama,
-        noHp,
-        password,
-        confirmPassword,
-        activationCode: activationCode.trim(),
-        kecamatanId,
-        kelurahanId: kelurahanId || undefined,
-        rwId: rwId || undefined,
-        rtId: rtId || undefined,
-      });
+      let data;
+      if (fotoKTP) {
+        const fd = new FormData();
+        fd.append('nama', nama);
+        fd.append('noHp', noHp);
+        fd.append('nik', nik);
+        fd.append('password', password);
+        fd.append('confirmPassword', confirmPassword);
+        fd.append('activationCode', activationCode.trim());
+        fd.append('kecamatanId', String(kecamatanId));
+        if (kelurahanId) fd.append('kelurahanId', String(kelurahanId));
+        if (rwId) fd.append('rwId', String(rwId));
+        if (rtId) fd.append('rtId', String(rtId));
+        fd.append('fotoKtp', fotoKTP);
+        const res = await api.post('/auth/register', fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        data = res.data;
+      } else {
+        const res = await api.post('/auth/register', {
+          nama,
+          noHp,
+          nik: nik || undefined,
+          password,
+          confirmPassword,
+          activationCode: activationCode.trim(),
+          kecamatanId,
+          kelurahanId: kelurahanId || undefined,
+          rwId: rwId || undefined,
+          rtId: rtId || undefined,
+        });
+        data = res.data;
+      }
 
       setSuccess(`✅ Berhasil! Selamat datang ${data.user.nama}`);
 
@@ -332,7 +356,19 @@ export function RegisterPage() {
                 <input className="input" required maxLength={100} value={nama} onChange={(e) => setNama(e.target.value)} />
               </div>
               <div>
-                <label className="label">Nomor HP / WA</label>
+                <label className="label">NIK KTP *</label>
+                <input
+                  className="input"
+                  type="tel"
+                  required
+                  maxLength={16}
+                  placeholder="16 digit NIK"
+                  value={nik}
+                  onChange={(e) => setNik(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <div>
+                <label className="label">Nomor HP *</label>
                 <input
                   className="input"
                   type="tel"
@@ -343,6 +379,17 @@ export function RegisterPage() {
                   onChange={(e) => setNoHp(e.target.value)}
                 />
                 <p className="mt-1 text-xs text-gray-500">Nomor ini akan jadi username login Anda</p>
+              </div>
+              <div>
+                <label className="label">Foto KTP</label>
+                <input
+                  className="input"
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => setFotoKTP(e.target.files?.[0] ?? null)}
+                />
+                {fotoKTP && <p className="mt-1 text-xs text-green-600">✓ Foto KTP siap diupload</p>}
               </div>
               <div>
                 <label className="label">Password</label>
@@ -394,7 +441,7 @@ export function RegisterPage() {
                   type="submit"
                   className="btn-primary flex-1"
                   style={{ backgroundColor: '#16a34a' }}
-                  disabled={loading || !passwordsMatch || password.length < 8}
+                  disabled={loading || !passwordsMatch || password.length < 8 || nik.length !== 16}
                 >
                   {loading ? 'Mendaftar…' : 'Daftar Sekarang'}
                 </button>

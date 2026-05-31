@@ -7,6 +7,7 @@ import {
   forceWhatsappReconnect,
   getWhatsappStatus,
 } from '../../ai/modules/whatsapp-ai/whatsapp.service';
+import { formatPhone, formatSender } from '../../lib/waPhone';
 import { buildLaporanListWhere, buildWilayahKeyedListWhere, resolveVisibleRtIds } from '../security/security';
 
 export async function aiRoutes(app: FastifyInstance) {
@@ -18,7 +19,28 @@ export async function aiRoutes(app: FastifyInstance) {
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
-    return { success: true, data: alerts };
+    const data = alerts.map((a) => {
+      const payload = a.payload as Record<string, unknown> | null;
+      const rawFrom = typeof payload?.from === 'string' ? payload.from : null;
+      const fromReadable = rawFrom ? formatSender(rawFrom) : null;
+      let description = a.description;
+      if (rawFrom && description.includes(rawFrom)) {
+        description = description.replace(rawFrom, fromReadable ?? rawFrom);
+      }
+      return {
+        ...a,
+        description,
+        fromReadable,
+        payload: payload
+          ? {
+              ...payload,
+              from: rawFrom ? formatSender(rawFrom) : payload.from,
+              fromReadable,
+            }
+          : payload,
+      };
+    });
+    return { success: true, data };
   });
 
   app.get('/economic-alerts', { preHandler: [app.authenticate] }, async (req) => {
@@ -292,7 +314,12 @@ export async function aiRoutes(app: FastifyInstance) {
       orderBy: { receivedAt: 'desc' },
       take: Math.min(limit, 200),
     });
-    return { success: true, data: messages };
+    const data = messages.map((m) => ({
+      ...m,
+      from: formatPhone(m.from),
+      fromReadable: formatPhone(m.from),
+    }));
+    return { success: true, data };
   });
 
   app.get('/email-messages', { preHandler: [app.authenticate] }, async () => {
