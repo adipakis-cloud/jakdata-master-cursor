@@ -2,14 +2,13 @@
 .env.local
 .env.production
 uploads/
-wa-auth/
 wa-qr.png
 *.log
 
 .env
-wa-auth/
-wa-qr.png
+wa-qr.png
 
 .env
 .env.*
-add_scoring.js
+add_scoring.js
+
