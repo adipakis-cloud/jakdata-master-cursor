@@ -48,6 +48,11 @@ const STATUS_LABELS: Record<ReportStatus, string> = {
 const KODE_PATTERN =
   /\b((?:LPR|JAK|LP)-[\d]{4,}(?:-[\d]{3,5})?|[A-Z]{2,4}-\d{4}-\d{3,5})\b/i;
 
+function truncate(str: string | null | undefined, max: number): string | null {
+  if (!str) return null;
+  return str.length > max ? str.substring(0, max) : str;
+}
+
 export function phoneFromJid(jid: string): string {
   return toWaMatchPhone(jid);
 }
@@ -267,19 +272,26 @@ export async function createLaporanFromWhatsApp(params: {
   const territory = await resolveTerritoryIds(ctx, lokasiText);
   const kodeLaporan = await generateLaporanKodeWa();
 
+  const rawIsiLaporan =
+    messageType !== "text" && !isiLaporan.includes("[")
+      ? `[${messageType}] ${isiLaporan}`
+      : isiLaporan;
+
+  const safeIsiLaporan = truncate(rawIsiLaporan, 500) ?? "";
+  const safeLokasiText = truncate(lokasiText ?? ctx.wilayahLabel, 255);
+  const safeNoHp = truncate(phoneDisplay(ctx.phone), 20);
+  const safeKategori = truncate(kategori, 30) ?? "sosial";
+
   const laporan = await prisma.laporanWarga.create({
     data: {
       kodeLaporan,
       channelType: "whatsapp",
       namaPelapor: ctx.warga?.nama ?? "Warga (via WhatsApp)",
-      noHpPelapor: phoneDisplay(ctx.phone),
-      isiLaporan:
-        messageType !== "text" && !isiLaporan.includes("[")
-          ? `[${messageType}] ${isiLaporan}`
-          : isiLaporan,
-      kategori,
+      noHpPelapor: safeNoHp,
+      isiLaporan: safeIsiLaporan,
+      kategori: safeKategori,
       urgencyLevel: urgency,
-      lokasiText: lokasiText ?? ctx.wilayahLabel,
+      lokasiText: safeLokasiText,
       rtId: territory.rtId,
       kelurahanId: territory.kelurahanId,
       kecamatanId: territory.kecamatanId,
