@@ -1,5 +1,6 @@
 import type { LaporanWarga, ReportStatus, UrgencyLevel } from "@prisma/client";
 import { prisma } from "../../../config/prisma";
+import { dapil3KecamatanWhere } from "../../../lib/dapil3";
 import { formatPhone, jidToPhone, toWaMatchPhone } from "../../../lib/waPhone";
 import { aiQueue } from "../../../queues/queue.config";
 import { callAIJson } from "../../core/anthropic.service";
@@ -111,8 +112,8 @@ export async function resolveSenderContext(jid: string): Promise<WaSenderContext
   });
 
   let rtId: number | null = warga?.rtId ?? null;
-  let kelurahanId: number | null = warga?.rt.rw.kelurahanId ?? null;
-  let kecamatanId: number | null = warga?.rt.rw.kelurahan?.kecamatanId ?? null;
+  let kelurahanId: number | null = warga?.rt?.rw?.kelurahanId ?? null;
+  let kecamatanId: number | null = warga?.rt?.rw?.kelurahan?.kecamatanId ?? null;
 
   const recentLaporan = await prisma.laporanWarga.findMany({
     where: {
@@ -212,28 +213,43 @@ export async function formatLaporanStatusReply(
   );
 }
 
+async function getDapil3FallbackKecamatan(): Promise<{ id: number; nama: string } | null> {
+  return prisma.kecamatan.findFirst({
+    where: dapil3KecamatanWhere(),
+    orderBy: { nama: "asc" },
+    select: { id: true, nama: true },
+  });
+}
+
+/** Pastikan ctx.kecamatanId terisi (fallback Dapil 3) untuk pengirim tidak terdaftar. */
+async function ensureWaKecamatanFallback(ctx: WaSenderContext): Promise<number | null> {
+  if (ctx.kecamatanId != null) return ctx.kecamatanId;
+
+  const fallback = await getDapil3FallbackKecamatan();
+  if (fallback) {
+    console.warn(
+      `[JAKDATA][WA Laporan] Pengirim ${phoneDisplay(ctx.phone)} tidak dikenali — fallback kecamatan: ${fallback.nama} (id=${fallback.id})`,
+    );
+    ctx.kecamatanId = fallback.id;
+    return fallback.id;
+  }
+
+  console.warn(
+    `[JAKDATA][WA Laporan] Pengirim ${phoneDisplay(ctx.phone)} tidak dikenali — tidak ada kecamatan Dapil 3 di DB`,
+  );
+  return null;
+}
+
 async function resolveTerritoryIds(
   ctx: WaSenderContext,
   _lokasiText: string | null
 ): Promise<{ rtId: number | null; kelurahanId: number | null; kecamatanId: number | null }> {
-  if (ctx.rtId != null || ctx.kecamatanId != null) {
-    return { rtId: ctx.rtId, kelurahanId: ctx.kelurahanId, kecamatanId: ctx.kecamatanId };
-  }
-
-  const fallbackKecamatan = await prisma.kecamatan.findFirst({
-    where: { kota: { kode: { in: ['3172', '3173', '3101'] } } },
-    orderBy: { nama: 'asc' },
-  });
-
-  console.warn(
-    `[JAKDATA][WA Laporan] Pengirim ${phoneDisplay(ctx.phone)} tidak terdaftar — laporan masuk tanpa wilayah spesifik` +
-      (fallbackKecamatan ? ` (fallback: ${fallbackKecamatan.nama})` : ''),
-  );
+  const kecamatanId = await ensureWaKecamatanFallback(ctx);
 
   return {
-    rtId: null,
-    kelurahanId: null,
-    kecamatanId: fallbackKecamatan?.id ?? null,
+    rtId: ctx.rtId,
+    kelurahanId: ctx.kelurahanId,
+    kecamatanId,
   };
 }
 
@@ -430,24 +446,31 @@ JSON:
     const kategori = analysis.kategori ?? (isEmergency ? "darurat" : "sosial");
     const urgency = (analysis.urgency ?? "medium") as UrgencyLevel;
 
-    const laporan = await createLaporanFromWhatsApp({
-      ctx,
-      isiLaporan: laporanText,
-      kategori,
-      urgency,
-      lokasiText: analysis.lokasiText,
-      isEmergency,
-      messageType,
-    });
-    laporanId = laporan.id;
+    try {
+      const laporan = await createLaporanFromWhatsApp({
+        ctx,
+        isiLaporan: laporanText,
+        kategori,
+        urgency,
+        lokasiText: analysis.lokasiText,
+        isEmergency,
+        messageType,
+      });
+      laporanId = laporan.id;
 
-    const salam = ctx.warga?.nama ? `Pak/Ibu ${ctx.warga.nama.split(" ")[0]}, ` : "";
-    replyText =
-      `${salam}laporan Anda sudah kami catat.\n\n` +
-      `📋 *Nomor laporan: ${laporan.kodeLaporan}*\n` +
-      `Simpan nomor ini untuk cek status: *cek laporan ${laporan.kodeLaporan}*\n\n` +
-      `${isEmergency ? "🚨 Laporan ditandai DARURAT — koordinator RT kami hubungi segera.\n\n" : ""}` +
-      `Terima kasih sudah melapor untuk ${ctx.warga?.kelurahanNama ?? "wilayah Anda"}.`;
+      const salam = ctx.warga?.nama ? `Pak/Ibu ${ctx.warga.nama.split(" ")[0]}, ` : "";
+      replyText =
+        `${salam}laporan Anda sudah kami catat.\n\n` +
+        `📋 *Nomor laporan: ${laporan.kodeLaporan}*\n` +
+        `Simpan nomor ini untuk cek status: *cek laporan ${laporan.kodeLaporan}*\n\n` +
+        `${isEmergency ? "🚨 Laporan ditandai DARURAT — koordinator RT kami hubungi segera.\n\n" : ""}` +
+        `Terima kasih sudah melapor untuk ${ctx.warga?.kelurahanNama ?? "wilayah Anda"}.`;
+    } catch (err) {
+      console.error("[JAKDATA][WA Laporan] Gagal simpan laporan:", err);
+      replyText =
+        "Maaf, laporan sementara gagal disimpan di sistem. Silakan coba lagi beberapa saat atau hubungi petugas kelurahan terdekat.";
+      laporanId = null;
+    }
   } else if (analysis.intent === "new_laporan") {
     replyText = analysis.replyText;
   }
